@@ -5,6 +5,7 @@ Scan uses batched LLM calls: 3 total instead of ~60.
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -70,6 +71,7 @@ def run_scan(session_factory=None):
                 "gdelt_headlines": gdelt.fetch_articles(ticker, company),
             })
             SCAN_STATUS["tickers_fetched"] += 1
+            time.sleep(1.5)  # avoid GDELT rate limit (IP-based, no auth)
 
         SCAN_STATUS.update({"phase": 2, "phase_label": "Scoring StockTwits trader sentiment (LLM)"})
 
