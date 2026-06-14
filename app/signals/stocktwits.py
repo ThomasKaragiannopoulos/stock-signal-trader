@@ -3,10 +3,13 @@ StockTwits signal: fetch recent trader posts for a ticker,
 use LLM (batched) to score sentiment from human-language posts + explicit bullish/bearish tags.
 """
 import json
+import logging
 import os
 import subprocess
 
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 _NEUTRAL = {"score": 0.0, "confidence": 0.0, "detail": {"post_count": 0, "summary": "no data"}}
 
@@ -20,6 +23,7 @@ def fetch_posts(ticker: str) -> list[dict]:
             [curl, "-s", "--max-time", "10", url],
             capture_output=True, timeout=15,
         )
+        logger.info("StockTwits %s: returncode=%s stdout_len=%s stderr=%s", ticker, result.returncode, len(result.stdout), result.stderr[:100] if result.stderr else b"")
         if not result.stdout:
             return []
         data = json.loads(result.stdout.decode("utf-8", errors="replace"))
@@ -32,7 +36,8 @@ def fetch_posts(ticker: str) -> list[dict]:
             for m in messages[:20]
             if m.get("body")
         ]
-    except Exception:
+    except Exception as e:
+        logger.exception("StockTwits fetch failed for %s: %s", ticker, e)
         return []
 
 
@@ -74,7 +79,7 @@ def batch_score(ticker_posts: list[dict], client: OpenAI) -> list[dict]:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=100 * len(ticker_posts),
+            max_tokens=max(200, 100 * len(ticker_posts)),
             temperature=0,
             response_format={"type": "json_object"},
         )
