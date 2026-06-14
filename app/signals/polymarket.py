@@ -15,17 +15,49 @@ BEARISH_THRESHOLD = 0.40
 
 _NEUTRAL = {"score": 0.0, "confidence": 0.0, "detail": {"market_question": None, "implied_prob": None}}
 
+# Adjacent search terms per ticker — broader than company name to find macro/sector markets
+TICKER_QUERIES: dict[str, list[str]] = {
+    "AAPL":  ["Apple", "iPhone", "AI spending"],
+    "MSFT":  ["Microsoft", "AI", "cloud computing"],
+    "GOOGL": ["Google", "Alphabet", "AI search"],
+    "AMZN":  ["Amazon", "AWS", "ecommerce"],
+    "NVDA":  ["Nvidia", "AI chips", "semiconductor"],
+    "META":  ["Meta", "Facebook", "social media advertising"],
+    "TSLA":  ["Tesla", "Elon Musk", "electric vehicle"],
+    "JPM":   ["JPMorgan", "Federal Reserve interest rate", "banking"],
+    "V":     ["Visa", "consumer spending", "payment"],
+    "MA":    ["Mastercard", "consumer spending", "payment"],
+    "UNH":   ["UnitedHealth", "healthcare", "insurance"],
+    "HD":    ["Home Depot", "housing market", "real estate"],
+    "PG":    ["Procter Gamble", "consumer goods", "inflation"],
+    "JNJ":   ["Johnson Johnson", "pharma", "FDA approval"],
+    "XOM":   ["ExxonMobil", "oil price", "OPEC"],
+    "BAC":   ["Bank of America", "Federal Reserve interest rate", "banking"],
+    "DIS":   ["Disney", "streaming", "box office"],
+    "NFLX":  ["Netflix", "streaming", "subscriber growth"],
+    "AMD":   ["AMD", "AI chips", "semiconductor"],
+    "PYPL":  ["PayPal", "fintech", "digital payments"],
+}
+
 
 def fetch_markets(ticker: str, company_name: str | None = None) -> list[dict]:
-    """HTTP only — fetch Gamma API markets. Returns [] on error."""
-    try:
-        url = f"{GAMMA_BASE}/markets"
-        params = {"search": company_name or ticker, "active": "true", "limit": 5}
-        resp = httpx.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception:
-        return []
+    """HTTP only — fetch Gamma API markets using multiple search terms. Returns [] on error."""
+    queries = TICKER_QUERIES.get(ticker.upper(), [company_name or ticker])
+    seen_ids: set = set()
+    combined: list[dict] = []
+    for query in queries:
+        try:
+            url = f"{GAMMA_BASE}/markets"
+            resp = httpx.get(url, params={"search": query, "active": "true", "limit": 5}, timeout=10)
+            resp.raise_for_status()
+            for m in resp.json():
+                mid = m.get("id")
+                if mid not in seen_ids:
+                    seen_ids.add(mid)
+                    combined.append(m)
+        except Exception:
+            continue
+    return combined[:15]  # cap at 15 to keep LLM prompt manageable
 
 
 def _score_market(market: dict) -> dict:
