@@ -30,11 +30,11 @@ def fetch_posts(ticker: str) -> list[dict]:
         messages = data.get("messages", []) or []
         return [
             {
-                "body": m.get("body", ""),
+                "body": m["body"],
                 "sentiment": (m.get("entities") or {}).get("sentiment", {}).get("basic", ""),
             }
             for m in messages[:20]
-            if m.get("body")
+            if m and isinstance(m.get("body"), str) and m["body"].strip()
         ]
     except Exception as e:
         logger.exception("StockTwits fetch failed for %s: %s", ticker, e)
