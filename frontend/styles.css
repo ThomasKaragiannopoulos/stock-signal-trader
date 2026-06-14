@@ -181,6 +181,17 @@ h1 {
 .btn-trade:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-scan { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 .btn-scan:hover { border-color: var(--accent); color: var(--accent); }
+.ticker-select {
+  height: 36px;
+  padding: 0 0.75rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ticker-select:focus { outline: none; border-color: var(--accent); }
 
 /* Table */
 table {

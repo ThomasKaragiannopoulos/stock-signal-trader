@@ -20,7 +20,19 @@
         <h1>Opportunities</h1>
         <p class="subtitle">Signal-fused trade candidates with LLM analysis. Confidence &gt; 50% shown.</p>
       </div>
-      <button id="scan-btn" class="btn btn-scan" onclick="triggerScan()">Scan Now</button>
+      <div style="display:flex;gap:0.75rem;align-items:center;">
+        <select id="ticker-filter" class="ticker-select" onchange="filterCards()">
+          <option value="">All tickers</option>
+          <option>AAPL</option><option>MSFT</option><option>GOOGL</option>
+          <option>AMZN</option><option>NVDA</option><option>META</option>
+          <option>TSLA</option><option>JPM</option><option>V</option>
+          <option>MA</option><option>UNH</option><option>HD</option>
+          <option>PG</option><option>JNJ</option><option>XOM</option>
+          <option>BAC</option><option>DIS</option><option>NFLX</option>
+          <option>AMD</option><option>PYPL</option>
+        </select>
+        <button id="scan-btn" class="btn btn-scan" onclick="triggerScan()">Scan Now</button>
+      </div>
     </div>
 
     <div id="scan-progress" class="scan-progress hidden">

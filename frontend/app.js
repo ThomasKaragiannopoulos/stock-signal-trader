@@ -50,6 +50,21 @@ function setActive(page) {
 
 // ── Opportunities page ────────────────────────────────────────────────────────
 
+let _allCards = [];  // cached card elements for filter
+
+function filterCards() {
+  const container = document.getElementById("cards");
+  if (!container || !_allCards.length) return;
+  const val = (document.getElementById("ticker-filter")?.value || "").toUpperCase();
+  container.innerHTML = "";
+  const visible = val ? _allCards.filter(el => el.dataset.ticker === val) : _allCards;
+  if (!visible.length) {
+    container.innerHTML = `<p class="empty">No data for ${val}. Run a scan first.</p>`;
+    return;
+  }
+  visible.forEach(el => container.appendChild(el));
+}
+
 async function loadOpportunities() {
   const container = document.getElementById("cards");
   if (!container) return;
@@ -62,8 +77,12 @@ async function loadOpportunities() {
       container.innerHTML = `<p class="empty">No opportunities yet. Run a scan to populate.</p>`;
       return;
     }
-    container.innerHTML = "";
-    data.forEach(opp => container.appendChild(buildCard(opp)));
+    _allCards = data.map(opp => {
+      const el = buildCard(opp);
+      el.dataset.ticker = opp.ticker;
+      return el;
+    });
+    filterCards();
   } catch (e) {
     container.innerHTML = `<p class="empty">Error: ${e.message}</p>`;
   }
