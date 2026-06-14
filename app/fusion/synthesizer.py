@@ -15,7 +15,7 @@ def batch_synthesize(items: list[dict], client: OpenAI | None = None) -> list[st
     Single LLM call to synthesize explanations for multiple opportunities.
 
     Args:
-        items: list of dicts with keys: ticker, polymarket, gdelt, technical,
+        items: list of dicts with keys: ticker, stocktwits, gdelt, technical,
                fused_score, fused_confidence, direction
     Returns:
         list of explanation strings in same order
@@ -29,12 +29,12 @@ def batch_synthesize(items: list[dict], client: OpenAI | None = None) -> list[st
     sections = []
     for i, o in enumerate(items):
         td = o["technical"].get("detail", {})
-        pd = o["polymarket"].get("detail", {})
+        sd = o["stocktwits"].get("detail", {})
         gd = o["gdelt"].get("detail", {})
         sections.append(
             f"{i}. {o['ticker']} — {o['direction'].upper()} {o['fused_confidence']:.0%}\n"
-            f"   Polymarket: score={o['polymarket']['score']:+.2f} conf={o['polymarket']['confidence']:.0%}"
-            f" market={pd.get('market_question', 'none')}\n"
+            f"   StockTwits: score={o['stocktwits']['score']:+.2f} conf={o['stocktwits']['confidence']:.0%}"
+            f" posts={sd.get('post_count', 0)}\n"
             f"   GDELT: score={o['gdelt']['score']:+.2f} conf={o['gdelt']['confidence']:.0%}"
             f" ({gd.get('headline_count', 0)} headlines) {gd.get('summary', '')}\n"
             f"   Technical: RSI={td.get('rsi', 'n/a')} score={o['technical']['score']:+.2f}"
@@ -75,7 +75,7 @@ def batch_synthesize(items: list[dict], client: OpenAI | None = None) -> list[st
 
 def synthesize(
     ticker: str,
-    polymarket: dict,
+    stocktwits: dict,
     gdelt: dict,
     technical: dict,
     fused_score: float,
@@ -85,7 +85,7 @@ def synthesize(
     """Single-ticker interface — used by tests and /debug endpoint."""
     return batch_synthesize([{
         "ticker": ticker,
-        "polymarket": polymarket,
+        "stocktwits": stocktwits,
         "gdelt": gdelt,
         "technical": technical,
         "fused_score": fused_score,

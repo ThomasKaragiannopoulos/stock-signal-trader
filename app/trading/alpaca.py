@@ -5,9 +5,9 @@ import os
 import httpx
 
 ALPACA_BASE = "https://paper-api.alpaca.markets/v2"
-POSITION_SIZE_PCT = 0.05   # 5% of portfolio per trade
-STOP_LOSS_PCT = 0.03       # 3% stop loss
-TAKE_PROFIT_PCT = 0.05     # 5% take profit
+POSITION_SIZE_PCT = float(os.getenv("POSITION_SIZE_PCT", "0.05"))
+STOP_LOSS_PCT     = float(os.getenv("STOP_LOSS_PCT", "0.03"))
+TAKE_PROFIT_PCT   = float(os.getenv("TAKE_PROFIT_PCT", "0.05"))
 
 
 def _headers() -> dict:

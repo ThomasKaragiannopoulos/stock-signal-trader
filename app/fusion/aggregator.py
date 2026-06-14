@@ -19,7 +19,7 @@ def fuse(
     gdelt: dict,
     technical: dict,
     nn: dict | None = None,
-) -> dict:
+) -> dict[str, float | str | bool]:
     """
     Args:
         Each dict has keys: score (float), confidence (float), detail (dict)

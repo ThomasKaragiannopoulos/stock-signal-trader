@@ -9,6 +9,6 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
     stop=stop_after_attempt(3),
     reraise=True,
 )
-def llm_complete(client, **kwargs):
+def llm_complete(client, **kwargs) -> object:
     """OpenAI chat completion with retry on transient API errors."""
     return client.chat.completions.create(**kwargs)

@@ -175,7 +175,7 @@ def test_history_empty(client):
 
 def test_scan_endpoint(client):
     with patch("app.main.run_scan"):
-        resp = client.get("/scan")
+        resp = client.post("/scan")
     assert resp.status_code == 200
     assert resp.json()["status"] == "scan complete"
 

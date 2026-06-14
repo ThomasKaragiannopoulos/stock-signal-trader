@@ -10,7 +10,7 @@ from typing import Generator
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, text
 from sqlalchemy.orm import Session
 
 from app.models import Base, Opportunity, Trade, get_engine, get_session_factory
@@ -109,7 +109,7 @@ def execute_trade(opportunity_id: int, db: Session = Depends(get_db)):
             "confidence": opp.fused_confidence,
         },
     )
-    opp.traded = 1
+    opp.traded = True
     db.add(trade)
     db.commit()
     db.refresh(trade)
@@ -168,7 +168,8 @@ def scan_status():
 # ── Manual scan trigger ───────────────────────────────────────────────────────
 
 @app.get("/health")
-def health():
+def health(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
     return {"status": "ok"}
 
 

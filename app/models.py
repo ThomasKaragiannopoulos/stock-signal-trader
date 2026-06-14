@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, create_engine, text
+from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, Boolean, Index, ForeignKeyConstraint, create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 Base = declarative_base()
@@ -7,6 +7,11 @@ Base = declarative_base()
 
 class Opportunity(Base):
     __tablename__ = "opportunities"
+    __table_args__ = (
+        Index("ix_opp_ticker", "ticker"),
+        Index("ix_opp_scanned_at", "scanned_at"),
+        Index("ix_opp_confidence", "fused_confidence"),
+    )
 
     id = Column(Integer, primary_key=True)
     ticker = Column(String, nullable=False)
@@ -31,11 +36,16 @@ class Opportunity(Base):
     judge_reason = Column(String)
     signal_detail = Column(JSON)  # raw detail from each signal
 
-    traded = Column(Integer, default=0)  # 0 = not traded, 1 = traded
+    traded = Column(Boolean, default=False)
 
 
 class Trade(Base):
     __tablename__ = "trades"
+    __table_args__ = (
+        ForeignKeyConstraint(["opportunity_id"], ["opportunities.id"]),
+        Index("ix_trade_status", "status"),
+        Index("ix_trade_ticker", "ticker"),
+    )
 
     id = Column(Integer, primary_key=True)
     opportunity_id = Column(Integer)
@@ -75,6 +85,13 @@ def _migrate(engine) -> None:
         ("opportunities", "judge_verdict", "VARCHAR"),
         ("opportunities", "judge_reason", "TEXT"),
     ]
+    new_indices = [
+        ("ix_opp_ticker", "opportunities", "ticker"),
+        ("ix_opp_scanned_at", "opportunities", "scanned_at"),
+        ("ix_opp_confidence", "opportunities", "fused_confidence"),
+        ("ix_trade_status", "trades", "status"),
+        ("ix_trade_ticker", "trades", "ticker"),
+    ]
     with engine.connect() as conn:
         for table, col, col_def in new_cols:
             try:
@@ -82,6 +99,12 @@ def _migrate(engine) -> None:
                 conn.commit()
             except Exception:
                 pass  # column already exists
+        for idx_name, table, col in new_indices:
+            try:
+                conn.execute(text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table} ({col})"))
+                conn.commit()
+            except Exception:
+                pass  # index already exists
 
 
 def get_session_factory(engine):

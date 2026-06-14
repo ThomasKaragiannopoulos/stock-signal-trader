@@ -65,6 +65,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
     })
 
     try:
+        scan_started_at = time.monotonic()
         # ── Phase 1: Fetch HTTP data ───────────────────────────────────────
         logger.info("Phase 1: fetching market + news data for %d tickers", len(watchlist))
         ticker_data = []
@@ -136,6 +137,9 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
             session.close()
             return
 
+        if time.monotonic() - scan_started_at > 1200:
+            logger.warning("Scan has been running for >20 minutes before Phase 5")
+
         # ── Phase 5: Batch LLM — synthesis ────────────────────────────────
         SCAN_STATUS.update({"phase": 5, "phase_label": "Generating summaries (LLM)"})
         logger.info("Phase 5: synthesizing %d opportunities", len(opportunities))
@@ -143,7 +147,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
             [
                 {
                     "ticker": o["ticker"],
-                    "polymarket": o["stocktwits"],
+                    "stocktwits": o["stocktwits"],
                     "gdelt": o["gdelt"],
                     "technical": o["technical"],
                     "fused_score": o["fusion"]["fused_score"],
