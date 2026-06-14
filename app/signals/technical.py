@@ -92,10 +92,8 @@ def get_signal(ticker: str, **_) -> dict:
 
     avg_score = (rsi_score + macd_s + ma_s) / 3.0
 
-    # Confidence: higher when signals agree
-    signals = [rsi_score, macd_s, ma_s]
-    same_sign = sum(1 for s in signals if (s > 0) == (avg_score > 0) and s != 0)
-    confidence = 0.4 + (0.2 * same_sign)  # 0.4 baseline, up to 1.0
+    # Confidence: proportional to signal strength — strong/agreeing signals → high confidence
+    confidence = max(0.25, min(1.0, abs(avg_score)))
 
     ma20 = float(close.rolling(20).mean().iloc[-1])
     ma50 = float(close.rolling(50).mean().iloc[-1])

@@ -64,7 +64,7 @@ def fuse(
         for sig in signals.values()
     ]
     non_neutral = [s for s in signs if s != 0]
-    all_agree = len(non_neutral) == 3 and len(set(non_neutral)) == 1
+    all_agree = len(non_neutral) >= 2 and len(set(non_neutral)) == 1
 
     fused_confidence = min(1.0, base_confidence + (AGREEMENT_BONUS if all_agree else 0.0))
 
