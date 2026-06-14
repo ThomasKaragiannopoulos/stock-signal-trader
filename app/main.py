@@ -1,0 +1,203 @@
+import logging
+import os
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+load_dotenv()
+from datetime import datetime
+from typing import Generator
+
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import desc
+from sqlalchemy.orm import Session
+
+from app.models import Base, Opportunity, Trade, get_engine, get_session_factory
+from app.scheduler import run_scan, start_scheduler
+from app.trading import alpaca
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+engine = get_engine(os.getenv("DATABASE_URL", "sqlite:///./trader.db"))
+Base.metadata.create_all(engine)
+_SessionFactory = get_session_factory(engine)
+
+
+def get_db() -> Generator[Session, None, None]:
+    session = _SessionFactory()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler = start_scheduler(_SessionFactory)
+    yield
+    scheduler.shutdown()
+
+
+app = FastAPI(title="Stock Signal Trader", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ── Opportunities ─────────────────────────────────────────────────────────────
+
+@app.get("/opportunities")
+def list_opportunities(db: Session = Depends(get_db)):
+    rows = (
+        db.query(Opportunity)
+        .filter(Opportunity.traded == 0)
+        .order_by(desc(Opportunity.fused_confidence))
+        .limit(50)
+        .all()
+    )
+    return [_opportunity_to_dict(o) for o in rows]
+
+
+# ── Execute trade ─────────────────────────────────────────────────────────────
+
+@app.post("/trade/{opportunity_id}")
+def execute_trade(opportunity_id: int, db: Session = Depends(get_db)):
+    opp = db.query(Opportunity).filter_by(id=opportunity_id).first()
+    if opp is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    if opp.traded:
+        raise HTTPException(status_code=400, detail="Already traded")
+    if opp.direction == "neutral":
+        raise HTTPException(status_code=400, detail="Cannot trade neutral signal")
+
+    order = alpaca.submit_bracket_order(opp.ticker, opp.direction)
+
+    trade = Trade(
+        opportunity_id=opp.id,
+        ticker=opp.ticker,
+        direction=opp.direction,
+        entry_price=order["entry_price"],
+        qty=order["qty"],
+        notional=order["notional"],
+        stop_price=order["stop_price"],
+        target_price=order["target_price"],
+        alpaca_order_id=order["alpaca_order_id"],
+        signal_scores={
+            "polymarket": opp.polymarket_score,
+            "gdelt": opp.gdelt_score,
+            "technical": opp.technical_score,
+            "fused": opp.fused_score,
+            "confidence": opp.fused_confidence,
+        },
+    )
+    opp.traded = 1
+    db.add(trade)
+    db.commit()
+    db.refresh(trade)
+    return _trade_to_dict(trade)
+
+
+# ── Portfolio ─────────────────────────────────────────────────────────────────
+
+@app.get("/portfolio")
+def portfolio():
+    try:
+        positions = alpaca.get_positions()
+        account = alpaca.get_account()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Alpaca error: {e}")
+
+    return {
+        "equity": float(account["equity"]),
+        "cash": float(account["cash"]),
+        "positions": [
+            {
+                "ticker": p["symbol"],
+                "qty": float(p["qty"]),
+                "side": p["side"],
+                "entry_price": float(p["avg_entry_price"]),
+                "current_price": float(p["current_price"]),
+                "unrealised_pnl": float(p["unrealized_pl"]),
+                "unrealised_pnl_pct": float(p["unrealized_plpc"]) * 100,
+                "market_value": float(p["market_value"]),
+            }
+            for p in positions
+        ],
+    }
+
+
+# ── History ───────────────────────────────────────────────────────────────────
+
+@app.get("/history")
+def history(db: Session = Depends(get_db)):
+    trades = (
+        db.query(Trade)
+        .filter_by(status="closed")
+        .order_by(desc(Trade.closed_at))
+        .all()
+    )
+    return [_trade_to_dict(t) for t in trades]
+
+
+# ── Manual scan trigger ───────────────────────────────────────────────────────
+
+@app.get("/scan")
+def trigger_scan():
+    try:
+        run_scan(_SessionFactory)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "scan complete", "timestamp": datetime.utcnow().isoformat()}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _opportunity_to_dict(o: Opportunity) -> dict:
+    return {
+        "id": o.id,
+        "ticker": o.ticker,
+        "scanned_at": o.scanned_at.isoformat() if o.scanned_at else None,
+        "signals": {
+            "polymarket": {"score": o.polymarket_score, "confidence": o.polymarket_confidence},
+            "gdelt": {"score": o.gdelt_score, "confidence": o.gdelt_confidence},
+            "technical": {"score": o.technical_score, "confidence": o.technical_confidence},
+        },
+        "fused_score": o.fused_score,
+        "fused_confidence": o.fused_confidence,
+        "direction": o.direction,
+        "llm_explanation": o.llm_explanation,
+        "signal_detail": o.signal_detail,
+        "traded": bool(o.traded),
+    }
+
+
+def _trade_to_dict(t: Trade) -> dict:
+    return {
+        "id": t.id,
+        "opportunity_id": t.opportunity_id,
+        "ticker": t.ticker,
+        "direction": t.direction,
+        "executed_at": t.executed_at.isoformat() if t.executed_at else None,
+        "entry_price": t.entry_price,
+        "qty": t.qty,
+        "notional": t.notional,
+        "stop_price": t.stop_price,
+        "target_price": t.target_price,
+        "alpaca_order_id": t.alpaca_order_id,
+        "status": t.status,
+        "exit_price": t.exit_price,
+        "realised_pnl": t.realised_pnl,
+        "closed_at": t.closed_at.isoformat() if t.closed_at else None,
+        "signal_scores": t.signal_scores,
+    }
+
+
+# ── Static frontend ───────────────────────────────────────────────────────────
+
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Signal Trader — History</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand">Signal Trader</a>
+    <a href="/" data-page="opportunities">Opportunities</a>
+    <a href="/portfolio.html" data-page="portfolio">Portfolio</a>
+    <a href="/history.html" data-page="history" class="active">History</a>
+  </nav>
+
+  <main>
+    <h1>Trade History</h1>
+    <p class="subtitle">All closed trades — outcomes, P&amp;L, and signal scores at entry.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Direction</th>
+          <th>Entry</th>
+          <th>Exit</th>
+          <th>Qty</th>
+          <th>Realised P&amp;L</th>
+          <th>Fused Score</th>
+          <th>Closed</th>
+        </tr>
+      </thead>
+      <tbody id="history-body">
+        <tr><td colspan="8" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </main>
+
+  <div id="toast"></div>
+  <script src="app.js"></script>
+  <script>loadHistory();</script>
+</body>
+</html>

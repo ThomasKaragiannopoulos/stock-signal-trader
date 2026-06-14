@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Signal Trader — Portfolio</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand">Signal Trader</a>
+    <a href="/" data-page="opportunities">Opportunities</a>
+    <a href="/portfolio.html" data-page="portfolio" class="active">Portfolio</a>
+    <a href="/history.html" data-page="history">History</a>
+  </nav>
+
+  <main>
+    <h1>Portfolio</h1>
+    <p class="subtitle">Live open positions on Alpaca paper account.</p>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-label">Equity</div>
+        <div class="stat-value" id="equity">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Cash</div>
+        <div class="stat-value" id="cash">—</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Side</th>
+          <th>Qty</th>
+          <th>Entry</th>
+          <th>Current</th>
+          <th>P&amp;L</th>
+          <th>P&amp;L %</th>
+        </tr>
+      </thead>
+      <tbody id="positions-body">
+        <tr><td colspan="7" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </main>
+
+  <div id="toast"></div>
+  <script src="app.js"></script>
+  <script>loadPortfolio();</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Signal Trader — Opportunities</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand">Signal Trader</a>
+    <a href="/" data-page="opportunities" class="active">Opportunities</a>
+    <a href="/portfolio.html" data-page="portfolio">Portfolio</a>
+    <a href="/history.html" data-page="history">History</a>
+  </nav>
+
+  <main>
+    <div class="toolbar">
+      <div>
+        <h1>Opportunities</h1>
+        <p class="subtitle">Signal-fused trade candidates with LLM analysis. Confidence &gt; 50% shown.</p>
+      </div>
+      <button id="scan-btn" class="btn btn-scan" onclick="triggerScan()">Scan Now</button>
+    </div>
+
+    <div id="cards" class="cards">
+      <p class="empty">Loading…</p>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+  <script src="app.js"></script>
+  <script>loadOpportunities();</script>
+</body>
+</html>
