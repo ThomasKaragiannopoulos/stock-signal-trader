@@ -10,7 +10,7 @@ from typing import Generator
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.models import Base, Opportunity, Trade, get_engine, get_session_factory
@@ -56,11 +56,20 @@ app.add_middleware(
 
 @app.get("/opportunities")
 def list_opportunities(db: Session = Depends(get_db)):
+    # Latest scanned_at per ticker, then fetch those rows
+    latest_per_ticker = (
+        db.query(Opportunity.ticker, func.max(Opportunity.scanned_at).label("max_ts"))
+        .group_by(Opportunity.ticker)
+        .subquery()
+    )
     rows = (
         db.query(Opportunity)
-        .filter(Opportunity.traded == 0)
+        .join(
+            latest_per_ticker,
+            (Opportunity.ticker == latest_per_ticker.c.ticker)
+            & (Opportunity.scanned_at == latest_per_ticker.c.max_ts),
+        )
         .order_by(desc(Opportunity.fused_confidence))
-        .limit(50)
         .all()
     )
     return [_opportunity_to_dict(o) for o in rows]
