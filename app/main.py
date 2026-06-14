@@ -81,7 +81,7 @@ def list_opportunities(db: Session = Depends(get_db)):
 
 @app.post("/trade/{opportunity_id}")
 def execute_trade(opportunity_id: int, db: Session = Depends(get_db)):
-    opp = db.query(Opportunity).filter_by(id=opportunity_id).first()
+    opp = db.query(Opportunity).filter_by(id=opportunity_id).with_for_update().first()
     if opp is None:
         raise HTTPException(status_code=404, detail="Opportunity not found")
     if opp.traded:
@@ -91,28 +91,36 @@ def execute_trade(opportunity_id: int, db: Session = Depends(get_db)):
 
     order = alpaca.submit_bracket_order(opp.ticker, opp.direction)
 
-    trade = Trade(
-        opportunity_id=opp.id,
-        ticker=opp.ticker,
-        direction=opp.direction,
-        entry_price=order["entry_price"],
-        qty=order["qty"],
-        notional=order["notional"],
-        stop_price=order["stop_price"],
-        target_price=order["target_price"],
-        alpaca_order_id=order["alpaca_order_id"],
-        signal_scores={
-            "stocktwits": opp.stocktwits_score,
-            "gdelt": opp.gdelt_score,
-            "technical": opp.technical_score,
-            "fused": opp.fused_score,
-            "confidence": opp.fused_confidence,
-        },
-    )
-    opp.traded = True
-    db.add(trade)
-    db.commit()
-    db.refresh(trade)
+    try:
+        trade = Trade(
+            opportunity_id=opp.id,
+            ticker=opp.ticker,
+            direction=opp.direction,
+            entry_price=order["entry_price"],
+            qty=order["qty"],
+            notional=order["notional"],
+            stop_price=order["stop_price"],
+            target_price=order["target_price"],
+            alpaca_order_id=order["alpaca_order_id"],
+            signal_scores={
+                "stocktwits": opp.stocktwits_score,
+                "gdelt": opp.gdelt_score,
+                "technical": opp.technical_score,
+                "fused": opp.fused_score,
+                "confidence": opp.fused_confidence,
+            },
+        )
+        opp.traded = True
+        db.add(trade)
+        db.commit()
+        db.refresh(trade)
+    except Exception:
+        logger.exception(
+            "DB commit failed after Alpaca order placed — manual reconciliation required. "
+            "ticker=%s alpaca_order_id=%s", opp.ticker, order.get("alpaca_order_id")
+        )
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Trade recorded on Alpaca but failed to save locally. Check logs.")
     return _trade_to_dict(trade)
 
 

@@ -78,6 +78,8 @@ def submit_bracket_order(ticker: str, direction: str) -> dict:
     resp = httpx.post(f"{ALPACA_BASE}/orders", headers=_headers(), json=order_payload, timeout=15)
     resp.raise_for_status()
     order = resp.json()
+    if not order.get("id"):
+        raise ValueError(f"Alpaca returned malformed order response: {order!r}")
 
     return {
         "alpaca_order_id": order["id"],

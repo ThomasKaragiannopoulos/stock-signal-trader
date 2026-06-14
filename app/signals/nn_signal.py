@@ -5,6 +5,7 @@ Falls back to neutral (confidence=0) when fewer than MIN_TRADES closed trades ex
 import logging
 import pickle
 import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -19,12 +20,15 @@ MODEL_PATH = Path(__file__).parent.parent.parent / "nn_model.pkl"
 _model: MLPClassifier | None = None
 _scaler: StandardScaler | None = None
 _trained_on: int = 0
+_trained_at: float = 0.0
 _lock = threading.RLock()
+
+MODEL_MAX_AGE_DAYS = 7
 
 
 def load_model() -> None:
     """Load persisted model on startup."""
-    global _model, _scaler, _trained_on
+    global _model, _scaler, _trained_on, _trained_at
     if MODEL_PATH.exists():
         try:
             with open(MODEL_PATH, "rb") as f:
@@ -32,6 +36,7 @@ def load_model() -> None:
             _model = data["model"]
             _scaler = data["scaler"]
             _trained_on = data.get("n_trades", 0)
+            _trained_at = data.get("trained_at", 0.0)
             logger.info("NN: loaded model trained on %d trades", _trained_on)
         except Exception:
             logger.exception("NN: failed to load persisted model")
@@ -39,7 +44,7 @@ def load_model() -> None:
 
 def maybe_retrain(session) -> None:
     """Retrain if new closed trades exist since last training."""
-    global _model, _scaler, _trained_on
+    global _model, _scaler, _trained_on, _trained_at
     with _lock:
         from app.models import Opportunity, Trade
 
@@ -58,8 +63,11 @@ def maybe_retrain(session) -> None:
             return
 
         if n == _trained_on:
-            logger.info("NN: no new trades since last training (%d)", n)
-            return
+            age_days = (time.time() - _trained_at) / 86400
+            if _model is None or age_days < MODEL_MAX_AGE_DAYS:
+                logger.info("NN: no new trades since last training (%d)", n)
+                return
+            logger.info("NN: model is %.1f days old — retraining to refresh", age_days)
 
         X = np.array([
             [opp.stocktwits_score or 0.0, opp.gdelt_score or 0.0, opp.technical_score or 0.0]
@@ -76,9 +84,10 @@ def maybe_retrain(session) -> None:
         _model = model
         _scaler = scaler
         _trained_on = n
+        _trained_at = time.time()
 
         with open(MODEL_PATH, "wb") as f:
-            pickle.dump({"model": model, "scaler": scaler, "n_trades": n}, f)
+            pickle.dump({"model": model, "scaler": scaler, "n_trades": n, "trained_at": _trained_at}, f)
 
         logger.info("NN: retrained on %d trades", n)
 

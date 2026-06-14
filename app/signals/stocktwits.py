@@ -108,6 +108,7 @@ def batch_score(ticker_posts: list[dict], client: OpenAI) -> list[dict]:
             confidence = round(max(0.0, min(1.0, float(r.get("confidence", 0.5)))), 4)
             summary = r.get("summary", "")
         except (KeyError, ValueError, TypeError):
+            logger.warning("StockTwits: malformed LLM result for %s: %r", item["ticker"], results[i] if i < len(results) else "missing")
             score, confidence, summary = 0.0, 0.0, ""
         signals.append({
             "score": score,

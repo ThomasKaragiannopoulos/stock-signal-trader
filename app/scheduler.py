@@ -32,6 +32,7 @@ _scan_lock = threading.Lock()
 SCAN_STATUS: dict = {
     "running": False, "phase": 0, "phase_label": "idle",
     "tickers_total": 0, "tickers_fetched": 0, "opportunities": 0, "live_tickers": [],
+    "failed_tickers": [],
 }
 
 
@@ -107,6 +108,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
         logger.info("Phase 4: technical signals + NN + fusion")
         nn_signal.maybe_retrain(session)
         opportunities = []
+        failed_tickers = []
         for i, d in enumerate(ticker_data):
             ticker = d["ticker"]
             try:
@@ -129,6 +131,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
                 })
             except Exception:
                 logger.exception("Error processing %s", ticker)
+                failed_tickers.append(ticker)
 
         SCAN_STATUS["opportunities"] = len(opportunities)
 
@@ -216,6 +219,10 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
         except Exception:
             logger.exception("Failed to commit opportunities")
             session.rollback()
+
+        SCAN_STATUS["failed_tickers"] = failed_tickers
+        if failed_tickers:
+            logger.warning("Scan completed with %d failures: %s", len(failed_tickers), failed_tickers)
 
         session.close()
         logger.info("Scan complete: %d opportunities saved", len(opportunities))
