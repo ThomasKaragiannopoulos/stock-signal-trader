@@ -46,10 +46,17 @@ def fuse(
 
     fused_score = (weighted_score / total_weight) if total_weight > 0 else 0.0
 
-    # Base confidence: weighted average of individual confidences
-    base_confidence = sum(
-        sig["confidence"] * WEIGHTS[name] for name, sig in signals.items()
-    )
+    # Base confidence: weighted average of individual confidences.
+    # Only count signals that returned data (confidence > 0); renormalize their weights
+    # so a missing Polymarket signal doesn't cap achievable confidence at 0.6.
+    active = {n: s for n, s in signals.items() if s["confidence"] > 0}
+    if active:
+        active_weight_sum = sum(WEIGHTS[n] for n in active)
+        base_confidence = sum(
+            s["confidence"] * WEIGHTS[n] / active_weight_sum for n, s in active.items()
+        )
+    else:
+        base_confidence = 0.0
 
     # Agreement bonus
     signs = [
