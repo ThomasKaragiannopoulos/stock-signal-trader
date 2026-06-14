@@ -11,7 +11,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from openai import OpenAI
 
-from app.signals import polymarket, gdelt, technical
+from app.signals import stocktwits, gdelt, technical
 from app.fusion import aggregator, synthesizer
 from app.models import Opportunity, get_engine, get_session_factory
 from app.trading import alpaca
@@ -66,17 +66,17 @@ def run_scan(session_factory=None):
             ticker_data.append({
                 "ticker": ticker,
                 "company": company,
-                "poly_markets": polymarket.fetch_markets(ticker, company),
+                "st_posts": stocktwits.fetch_posts(ticker),
                 "gdelt_headlines": gdelt.fetch_articles(ticker, company),
             })
             SCAN_STATUS["tickers_fetched"] += 1
 
-        SCAN_STATUS.update({"phase": 2, "phase_label": "Analyzing Polymarket signals (LLM)"})
+        SCAN_STATUS.update({"phase": 2, "phase_label": "Scoring StockTwits trader sentiment (LLM)"})
 
-        # ── Phase 2: Batch LLM — Polymarket picks ─────────────────────────
-        logger.info("Phase 2: batch Polymarket LLM (%d tickers)", len(ticker_data))
-        poly_signals = polymarket.batch_score(
-            [{"ticker": d["ticker"], "markets": d["poly_markets"]} for d in ticker_data],
+        # ── Phase 2: Batch LLM — StockTwits sentiment ─────────────────────
+        logger.info("Phase 2: batch StockTwits LLM (%d tickers)", len(ticker_data))
+        st_signals = stocktwits.batch_score(
+            [{"ticker": d["ticker"], "posts": d["st_posts"]} for d in ticker_data],
             client,
         )
 
@@ -98,9 +98,9 @@ def run_scan(session_factory=None):
             ticker = d["ticker"]
             try:
                 tech = technical.get_signal(ticker)
-                poly_sig = poly_signals[i] if i < len(poly_signals) else {"score": 0.0, "confidence": 0.0, "detail": {}}
+                st_sig = st_signals[i] if i < len(st_signals) else {"score": 0.0, "confidence": 0.0, "detail": {}}
                 gdelt_sig = gdelt_signals[i] if i < len(gdelt_signals) else {"score": 0.0, "confidence": 0.0, "detail": {}}
-                fusion = aggregator.fuse(poly_sig, gdelt_sig, tech)
+                fusion = aggregator.fuse(st_sig, gdelt_sig, tech)
 
                 if not fusion["opportunity"]:
                     logger.info("%s: confidence %.0f%% — skipping", ticker, fusion["fused_confidence"] * 100)
@@ -109,7 +109,7 @@ def run_scan(session_factory=None):
                 logger.info("%s: %s %.0f%%", ticker, fusion["direction"], fusion["fused_confidence"] * 100)
                 opportunities.append({
                     "ticker": ticker,
-                    "polymarket": poly_sig,
+                    "stocktwits": st_sig,
                     "gdelt": gdelt_sig,
                     "technical": tech,
                     "fusion": fusion,
@@ -131,7 +131,7 @@ def run_scan(session_factory=None):
             [
                 {
                     "ticker": o["ticker"],
-                    "polymarket": o["polymarket"],
+                    "polymarket": o["stocktwits"],
                     "gdelt": o["gdelt"],
                     "technical": o["technical"],
                     "fused_score": o["fusion"]["fused_score"],
@@ -146,8 +146,8 @@ def run_scan(session_factory=None):
         for o, explanation in zip(opportunities, explanations):
             opp = Opportunity(
                 ticker=o["ticker"],
-                polymarket_score=o["polymarket"]["score"],
-                polymarket_confidence=o["polymarket"]["confidence"],
+                polymarket_score=o["stocktwits"]["score"],
+                polymarket_confidence=o["stocktwits"]["confidence"],
                 gdelt_score=o["gdelt"]["score"],
                 gdelt_confidence=o["gdelt"]["confidence"],
                 technical_score=o["technical"]["score"],
@@ -157,7 +157,7 @@ def run_scan(session_factory=None):
                 direction=o["fusion"]["direction"],
                 llm_explanation=explanation,
                 signal_detail={
-                    "polymarket": o["polymarket"]["detail"],
+                    "stocktwits": o["stocktwits"]["detail"],
                     "gdelt": o["gdelt"]["detail"],
                     "technical": o["technical"]["detail"],
                 },

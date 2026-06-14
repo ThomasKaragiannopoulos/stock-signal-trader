@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.models import Base, Opportunity, Trade, get_engine, get_session_factory
 from app.scheduler import run_scan, start_scheduler, SCAN_STATUS
 from app.trading import alpaca
-from app.signals import polymarket, gdelt, technical
+from app.signals import stocktwits, gdelt, technical
 from app.fusion import aggregator
 
 logging.basicConfig(level=logging.INFO)
@@ -213,11 +213,11 @@ def _trade_to_dict(t: Trade) -> dict:
 def debug_ticker(ticker: str):
     from app.scheduler import TICKER_TO_COMPANY
     company = TICKER_TO_COMPANY.get(ticker.upper(), ticker.upper())
-    poly = polymarket.get_signal(ticker.upper(), company)
+    st = stocktwits.get_signal(ticker.upper())
     gdelt_sig = gdelt.get_signal(ticker.upper(), company)
     tech = technical.get_signal(ticker.upper())
-    fusion = aggregator.fuse(poly, gdelt_sig, tech)
-    return {"ticker": ticker.upper(), "polymarket": poly, "gdelt": gdelt_sig, "technical": tech, "fusion": fusion}
+    fusion = aggregator.fuse(st, gdelt_sig, tech)
+    return {"ticker": ticker.upper(), "stocktwits": st, "gdelt": gdelt_sig, "technical": tech, "fusion": fusion}
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────

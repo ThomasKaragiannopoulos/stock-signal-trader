@@ -75,7 +75,7 @@ function buildCard(opp) {
   const confPct = Math.round(conf * 100);
 
   const signalDefs = [
-    { key: "polymarket", label: "Polymarket" },
+    { key: "polymarket", label: "StockTwits" },
     { key: "gdelt",      label: "GDELT News" },
     { key: "technical",  label: "Technical" },
   ];
