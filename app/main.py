@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.models import Base, Opportunity, Trade, get_engine, get_session_factory
 from app.scheduler import run_scan, start_scheduler, SCAN_STATUS
 from app.trading import alpaca
-from app.signals import stocktwits, gdelt, technical
+from app.signals import stocktwits, gdelt, technical, nn_signal
 from app.fusion import aggregator
 
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +37,7 @@ def get_db() -> Generator[Session, None, None]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    nn_signal.load_model()
     scheduler = start_scheduler(_SessionFactory)
     yield
     scheduler.shutdown()
@@ -186,11 +187,14 @@ def _opportunity_to_dict(o: Opportunity) -> dict:
             "polymarket": {"score": o.polymarket_score, "confidence": o.polymarket_confidence},
             "gdelt": {"score": o.gdelt_score, "confidence": o.gdelt_confidence},
             "technical": {"score": o.technical_score, "confidence": o.technical_confidence},
+            "nn": {"score": o.nn_score, "confidence": o.nn_confidence},
         },
         "fused_score": o.fused_score,
         "fused_confidence": o.fused_confidence,
         "direction": o.direction,
         "llm_explanation": o.llm_explanation,
+        "judge_verdict": o.judge_verdict,
+        "judge_reason": o.judge_reason,
         "signal_detail": o.signal_detail,
         "traded": bool(o.traded),
     }

@@ -12,8 +12,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from openai import OpenAI
 
-from app.signals import stocktwits, gdelt, technical
-from app.fusion import aggregator, synthesizer
+from app.signals import stocktwits, gdelt, technical, nn_signal
+from app.fusion import aggregator, synthesizer, judge
 from app.models import Opportunity, get_engine, get_session_factory
 from app.trading import alpaca
 
@@ -94,10 +94,11 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
             client,
         )
 
-        SCAN_STATUS.update({"phase": 4, "phase_label": "Computing technical indicators & fusion"})
+        SCAN_STATUS.update({"phase": 4, "phase_label": "Computing technical indicators, NN & fusion"})
 
-        # ── Phase 4: Technical + fusion ───────────────────────────────────
-        logger.info("Phase 4: technical signals + fusion")
+        # ── Phase 4: Technical + NN + fusion ─────────────────────────────
+        logger.info("Phase 4: technical signals + NN + fusion")
+        nn_signal.maybe_retrain(session)
         opportunities = []
         for i, d in enumerate(ticker_data):
             ticker = d["ticker"]
@@ -105,11 +106,8 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
                 tech = technical.get_signal(ticker)
                 st_sig = st_signals[i] if i < len(st_signals) else {"score": 0.0, "confidence": 0.0, "detail": {}}
                 gdelt_sig = gdelt_signals[i] if i < len(gdelt_signals) else {"score": 0.0, "confidence": 0.0, "detail": {}}
-                fusion = aggregator.fuse(st_sig, gdelt_sig, tech)
-
-                if not fusion["opportunity"]:
-                    logger.info("%s: confidence %.0f%% — skipping", ticker, fusion["fused_confidence"] * 100)
-                    continue
+                nn_sig = nn_signal.get_signal(st_sig["score"], gdelt_sig["score"], tech["score"])
+                fusion = aggregator.fuse(st_sig, gdelt_sig, tech, nn_sig)
 
                 logger.info("%s: %s %.0f%%", ticker, fusion["direction"], fusion["fused_confidence"] * 100)
                 opportunities.append({
@@ -117,6 +115,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
                     "stocktwits": st_sig,
                     "gdelt": gdelt_sig,
                     "technical": tech,
+                    "nn": nn_sig,
                     "fusion": fusion,
                     "st_posts": d["st_posts"],
                     "gdelt_headlines": d["gdelt_headlines"],
@@ -132,7 +131,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
             return
 
         # ── Phase 5: Batch LLM — synthesis ────────────────────────────────
-        SCAN_STATUS.update({"phase": 5, "phase_label": f"Generating explanations for {len(opportunities)} opportunities (LLM)"})
+        SCAN_STATUS.update({"phase": 5, "phase_label": f"Generating summaries (LLM)"})
         logger.info("Phase 5: synthesizing %d opportunities", len(opportunities))
         explanations = synthesizer.batch_synthesize(
             [
@@ -150,7 +149,33 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
             client,
         )
 
-        for o, explanation in zip(opportunities, explanations):
+        # ── Phase 6: Batch LLM — judge ────────────────────────────────────
+        SCAN_STATUS.update({"phase": 6, "phase_label": "LLM judge making trade decisions"})
+        logger.info("Phase 6: judge evaluating %d opportunities", len(opportunities))
+        judge_results = judge.batch_judge(
+            [
+                {
+                    "ticker": o["ticker"],
+                    "st_score": o["stocktwits"]["score"],
+                    "st_conf": o["stocktwits"]["confidence"],
+                    "gdelt_score": o["gdelt"]["score"],
+                    "gdelt_conf": o["gdelt"]["confidence"],
+                    "tech_score": o["technical"]["score"],
+                    "tech_conf": o["technical"]["confidence"],
+                    "nn_score": o["nn"]["score"],
+                    "nn_conf": o["nn"]["confidence"],
+                    "nn_detail": o["nn"]["detail"],
+                    "fused_score": o["fusion"]["fused_score"],
+                    "fused_confidence": o["fusion"]["fused_confidence"],
+                    "direction": o["fusion"]["direction"],
+                    "summary": explanations[j],
+                }
+                for j, o in enumerate(opportunities)
+            ],
+            client,
+        )
+
+        for o, explanation, verdict in zip(opportunities, explanations, judge_results):
             opp = Opportunity(
                 ticker=o["ticker"],
                 polymarket_score=o["stocktwits"]["score"],
@@ -159,14 +184,19 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
                 gdelt_confidence=o["gdelt"]["confidence"],
                 technical_score=o["technical"]["score"],
                 technical_confidence=o["technical"]["confidence"],
+                nn_score=o["nn"]["score"],
+                nn_confidence=o["nn"]["confidence"],
                 fused_score=o["fusion"]["fused_score"],
                 fused_confidence=o["fusion"]["fused_confidence"],
                 direction=o["fusion"]["direction"],
                 llm_explanation=explanation,
+                judge_verdict=verdict["verdict"],
+                judge_reason=verdict["reason"],
                 signal_detail={
                     "stocktwits": {**o["stocktwits"]["detail"], "posts": o["st_posts"]},
                     "gdelt": {**o["gdelt"]["detail"], "headlines": o["gdelt_headlines"]},
                     "technical": o["technical"]["detail"],
+                    "nn": o["nn"]["detail"],
                 },
             )
             session.add(opp)

@@ -340,3 +340,24 @@ tbody td { padding: 12px 12px; }
 .sent-tag { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }
 .sent-tag.bullish { background: rgba(74,222,128,.2); color: #4ade80; }
 .sent-tag.bearish { background: rgba(248,113,113,.2); color: #f87171; }
+
+/* Judge verdict */
+.judge-block {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.judge-block.trade { background: rgba(74,222,128,.1); border: 1px solid rgba(74,222,128,.3); }
+.judge-block.skip  { background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.25); }
+.judge-badge {
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.judge-block.trade .judge-badge { color: #4ade80; }
+.judge-block.skip  .judge-badge { color: #f87171; }
+.judge-reason { color: var(--text); line-height: 1.4; }

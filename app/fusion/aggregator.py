@@ -1,41 +1,47 @@
 """
-Weighted fusion of three signal scores into a single confidence score + direction.
-Confidence: sum of active signal confidences / divisor (3→3.0, 2→2.5, 1→1.7).
-Missing signals are penalised via the divisor, not by zeroing their weight.
+Weighted fusion of up to four signal scores into a single confidence score + direction.
+Confidence: sum of active signal confidences / penalty divisor.
+  4 active → /4.0, 3 → /3.0, 2 → /2.5, 1 → /1.7
+NN signal has confidence=0 until enough trades exist — excluded from fusion automatically.
 """
 
 WEIGHTS = {
-    "polymarket": 0.4,
-    "gdelt": 0.3,
-    "technical": 0.3,
+    "stocktwits": 0.30,
+    "gdelt":       0.25,
+    "technical":   0.25,
+    "nn":          0.20,
 }
-_CONF_DIVISOR = {3: 3.0, 2: 2.5, 1: 1.7}
+_CONF_DIVISOR = {1: 1.7, 2: 2.5, 3: 3.0, 4: 4.0}
 
 
 def fuse(
-    polymarket: dict,
+    stocktwits: dict,
     gdelt: dict,
     technical: dict,
+    nn: dict | None = None,
 ) -> dict:
     """
     Args:
         Each dict has keys: score (float), confidence (float), detail (dict)
+        nn is optional — omit or pass None when no model is trained yet.
 
     Returns:
         {
             "fused_score": float in [-1, +1],
             "fused_confidence": float in [0, 1],
             "direction": "bullish" | "bearish" | "neutral",
-            "opportunity": bool,
+            "opportunity": bool (always True),
         }
     """
-    signals = {
-        "polymarket": polymarket,
-        "gdelt": gdelt,
-        "technical": technical,
+    signals: dict[str, dict] = {
+        "stocktwits": stocktwits,
+        "gdelt":      gdelt,
+        "technical":  technical,
     }
+    if nn is not None:
+        signals["nn"] = nn
 
-    # Weighted score (each score weighted by its own confidence × source weight)
+    # Weighted score (each signal weighted by confidence × source weight)
     total_weight = 0.0
     weighted_score = 0.0
     for name, sig in signals.items():
@@ -45,15 +51,14 @@ def fuse(
 
     fused_score = (weighted_score / total_weight) if total_weight > 0 else 0.0
 
-    # Confidence: sum active signal confidences / penalty divisor
+    # Confidence: sum active confidences / penalty divisor
     active = {n: s for n, s in signals.items() if s["confidence"] > 0}
     n_active = len(active)
     if n_active == 0:
         fused_confidence = 0.0
     else:
         total_conf = sum(s["confidence"] for s in active.values())
-        divisor = _CONF_DIVISOR[n_active]
-        fused_confidence = min(1.0, total_conf / divisor)
+        fused_confidence = min(1.0, total_conf / _CONF_DIVISOR[n_active])
 
     if fused_score > 0.05:
         direction = "bullish"

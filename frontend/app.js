@@ -107,6 +107,7 @@ function buildCard(opp) {
     { key: "polymarket", label: "StockTwits" },
     { key: "gdelt",      label: "GDELT News" },
     { key: "technical",  label: "Technical" },
+    { key: "nn",         label: "NN Model" },
   ];
 
   const signalBars = signalDefs.map(({ key, label }) => {
@@ -150,6 +151,13 @@ function buildCard(opp) {
         <div class="detail-item">Price ${tech.price ?? "—"} · MA20 ${tech.ma20 ?? "—"} · MA50 ${tech.ma50 ?? "—"}</div>
         <div class="detail-item">RSI ${tech.rsi ?? "—"} · MACD ${tech.macd_signal ?? "—"} · MA score ${tech.ma_score ?? "—"}</div>
       </div>
+      ${detail.nn ? `<div class="detail-section">
+        <div class="detail-title">Neural Network</div>
+        <div class="detail-item">${detail.nn.status === "active"
+          ? `Trained on ${detail.nn.n_trades} trades · P(profit) = ${(detail.nn.p_profit * 100).toFixed(1)}%`
+          : `No model yet — needs ${detail.nn.n_trades !== undefined ? `${10 - detail.nn.n_trades} more` : "10"} closed trades`
+        }</div>
+      </div>` : ""}
     </div>`;
 
   const card = document.createElement("div");
@@ -167,6 +175,11 @@ function buildCard(opp) {
       <div class="conf-track"><div class="conf-fill" style="width:${confPct}%"></div></div>
     </div>
     <p class="explanation">${opp.llm_explanation ?? ""}</p>
+    ${opp.judge_verdict ? `
+    <div class="judge-block ${opp.judge_verdict}">
+      <span class="judge-badge">${opp.judge_verdict === "trade" ? "✓ TRADE" : "✗ SKIP"}</span>
+      <span class="judge-reason">${escHtml(opp.judge_reason ?? "")}</span>
+    </div>` : ""}
     <div class="card-footer">
       <span class="scanned">Scanned ${opp.scanned_at ? new Date(opp.scanned_at).toLocaleString() : "—"}</span>
       <button class="btn-see-more" onclick="toggleDetail(this)">See more ▾</button>
@@ -193,7 +206,7 @@ async function executeTrade(id, btn) {
   }
 }
 
-const PHASE_PCT = { 0: 0, 1: 10, 2: 40, 3: 60, 4: 80, 5: 90 };
+const PHASE_PCT = { 0: 0, 1: 10, 2: 35, 3: 55, 4: 70, 5: 85, 6: 95 };
 
 function updateProgress(status) {
   const box = document.getElementById("scan-progress");
