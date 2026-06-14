@@ -3,18 +3,31 @@ GDELT signal: query GDELT Article Search API for recent news on a company,
 use LLM (batched) to assign sentiment score in [-1, +1].
 """
 import json
+import logging
 import os
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from openai import OpenAI
 
+logger = logging.getLogger(__name__)
+
 GDELT_BASE = "https://api.gdeltproject.org/api/v2/doc/doc"
+_CACHE_TTL = 1800  # 30 minutes
+_cache: dict[str, tuple[float, list[str]]] = {}
 
 
 def fetch_articles(ticker: str, company_name: str | None = None) -> list[str]:
-    """HTTP only — fetch GDELT headlines. Returns [] on error or rate limit."""
-    end = datetime.utcnow()
+    """HTTP only — fetch GDELT headlines. Returns [] on error or rate limit.
+    Results are cached per ticker for 30 minutes to avoid IP rate limiting."""
+    key = ticker.upper()
+    cached_at, cached_result = _cache.get(key, (0.0, []))
+    if time.monotonic() - cached_at < _CACHE_TTL:
+        logger.info("GDELT %s: cache hit (%d headlines)", ticker, len(cached_result))
+        return cached_result
+
+    end = datetime.now(timezone.utc)
     start = end - timedelta(hours=24)
     params = {
         "query": company_name or ticker,
@@ -27,11 +40,16 @@ def fetch_articles(ticker: str, company_name: str | None = None) -> list[str]:
     try:
         resp = httpx.get(GDELT_BASE, params=params, timeout=15)
         if resp.status_code == 429:
+            logger.warning("GDELT %s: rate limited (429)", ticker)
             return []
         resp.raise_for_status()
         articles = resp.json().get("articles", []) or []
-        return [a.get("title", "") for a in articles if a.get("title")]
+        headlines = [a.get("title", "") for a in articles if a.get("title")]
+        _cache[key] = (time.monotonic(), headlines)
+        logger.info("GDELT %s: fetched %d headlines", ticker, len(headlines))
+        return headlines
     except Exception:
+        logger.exception("GDELT %s: fetch failed", ticker)
         return []
 
 
