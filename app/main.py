@@ -45,9 +45,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Stock Signal Trader", lifespan=lifespan)
 
+_cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()] or ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -166,7 +167,12 @@ def scan_status():
 
 # ── Manual scan trigger ───────────────────────────────────────────────────────
 
-@app.get("/scan")
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.post("/scan")
 def trigger_scan(ticker: str = Query(default=None)):
     try:
         tickers = [ticker.upper()] if ticker else None
@@ -184,7 +190,7 @@ def _opportunity_to_dict(o: Opportunity) -> dict:
         "ticker": o.ticker,
         "scanned_at": o.scanned_at.isoformat() if o.scanned_at else None,
         "signals": {
-            "polymarket": {"score": o.stocktwits_score, "confidence": o.stocktwits_confidence},
+            "stocktwits": {"score": o.stocktwits_score, "confidence": o.stocktwits_confidence},
             "gdelt": {"score": o.gdelt_score, "confidence": o.gdelt_confidence},
             "technical": {"score": o.technical_score, "confidence": o.technical_confidence},
             "nn": {"score": o.nn_score, "confidence": o.nn_confidence},

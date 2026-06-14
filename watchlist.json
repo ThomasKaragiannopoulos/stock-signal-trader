@@ -1,1 +1,22 @@
-["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM", "V", "MA", "UNH", "HD", "PG", "JNJ", "XOM", "BAC", "DIS", "NFLX", "AMD", "PYPL"]
+{
+  "AAPL": "Apple",
+  "MSFT": "Microsoft",
+  "GOOGL": "Alphabet Google",
+  "AMZN": "Amazon",
+  "NVDA": "Nvidia",
+  "META": "Meta Facebook",
+  "TSLA": "Tesla",
+  "JPM": "JPMorgan Chase",
+  "V": "Visa",
+  "MA": "Mastercard",
+  "UNH": "UnitedHealth",
+  "HD": "Home Depot",
+  "PG": "Procter Gamble",
+  "JNJ": "Johnson Johnson",
+  "XOM": "ExxonMobil",
+  "BAC": "Bank of America",
+  "DIS": "Disney",
+  "NFLX": "Netflix",
+  "AMD": "AMD",
+  "PYPL": "PayPal"
+}

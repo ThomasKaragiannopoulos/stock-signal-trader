@@ -7,6 +7,8 @@ import os
 
 from openai import OpenAI
 
+from app.llm import llm_complete
+
 
 def batch_synthesize(items: list[dict], client: OpenAI | None = None) -> list[str]:
     """
@@ -48,7 +50,8 @@ def batch_synthesize(items: list[dict], client: OpenAI | None = None) -> list[st
     )
 
     try:
-        resp = client.chat.completions.create(
+        resp = llm_complete(
+            client,
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=250 * len(items),

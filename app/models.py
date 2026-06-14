@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -10,7 +10,7 @@ class Opportunity(Base):
 
     id = Column(Integer, primary_key=True)
     ticker = Column(String, nullable=False)
-    scanned_at = Column(DateTime, default=datetime.utcnow)
+    scanned_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     stocktwits_score = Column(Float)
     stocktwits_confidence = Column(Float)
@@ -41,7 +41,7 @@ class Trade(Base):
     opportunity_id = Column(Integer)
     ticker = Column(String, nullable=False)
     direction = Column(String)
-    executed_at = Column(DateTime, default=datetime.utcnow)
+    executed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     entry_price = Column(Float)
     qty = Column(Float)
@@ -85,4 +85,4 @@ def _migrate(engine) -> None:
 
 
 def get_session_factory(engine):
-    return sessionmaker(bind=engine)
+    return sessionmaker(engine)

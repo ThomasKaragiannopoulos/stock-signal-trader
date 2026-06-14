@@ -5,6 +5,7 @@ Scan uses batched LLM calls: 3 total instead of ~60.
 import json
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -21,15 +22,16 @@ logger = logging.getLogger(__name__)
 
 WATCHLIST_PATH = Path(__file__).parent.parent / "watchlist.json"
 
-SCAN_STATUS: dict = {"running": False, "phase": 0, "phase_label": "idle", "tickers_total": 0, "tickers_fetched": 0, "opportunities": 0, "live_tickers": []}
+# ticker → full company name, sourced from watchlist.json
+TICKER_TO_COMPANY: dict[str, str] = json.loads(WATCHLIST_PATH.read_text())
 
-TICKER_TO_COMPANY = {
-    "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet Google",
-    "AMZN": "Amazon", "NVDA": "Nvidia", "META": "Meta Facebook",
-    "TSLA": "Tesla", "JPM": "JPMorgan Chase", "V": "Visa", "MA": "Mastercard",
-    "UNH": "UnitedHealth", "HD": "Home Depot", "PG": "Procter Gamble",
-    "JNJ": "Johnson Johnson", "XOM": "ExxonMobil", "BAC": "Bank of America",
-    "DIS": "Disney", "NFLX": "Netflix", "AMD": "AMD", "PYPL": "PayPal",
+_GDELT_DELAY = 1.5  # seconds between tickers to avoid GDELT IP rate limit
+
+_scan_lock = threading.Lock()
+
+SCAN_STATUS: dict = {
+    "running": False, "phase": 0, "phase_label": "idle",
+    "tickers_total": 0, "tickers_fetched": 0, "opportunities": 0, "live_tickers": [],
 }
 
 
@@ -38,25 +40,29 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
     Scan all watchlist tickers using batched LLM calls.
 
     Phases:
-      1. Fetch all Polymarket markets + GDELT headlines (HTTP, no LLM)
-      2. One LLM call — pick best Polymarket market for all tickers
+      1. Fetch all StockTwits posts + GDELT headlines (HTTP, no LLM)
+      2. One LLM call — score StockTwits sentiment for all tickers
       3. One LLM call — score GDELT sentiment for all tickers
-      4. Technical indicators + fusion (local, no API)
+      4. Technical indicators + NN + fusion (local, no API)
       5. One LLM call — synthesize explanations for opportunities only
+      6. One LLM call — judge makes trade/skip decisions
     """
     if session_factory is None:
         engine = get_engine()
         session_factory = get_session_factory(engine)
 
-    if SCAN_STATUS["running"]:
+    if not _scan_lock.acquire(blocking=False):
         logger.warning("Scan already in progress — skipping concurrent request")
         return
 
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    watchlist = tickers if tickers else json.loads(WATCHLIST_PATH.read_text())
+    watchlist = tickers if tickers else list(TICKER_TO_COMPANY.keys())
     session = session_factory()
 
-    SCAN_STATUS.update({"running": True, "phase": 1, "phase_label": "Fetching market & news data", "tickers_total": len(watchlist), "tickers_fetched": 0, "opportunities": 0, "live_tickers": []})
+    SCAN_STATUS.update({
+        "running": True, "phase": 1, "phase_label": "Fetching market & news data",
+        "tickers_total": len(watchlist), "tickers_fetched": 0, "opportunities": 0, "live_tickers": [],
+    })
 
     try:
         # ── Phase 1: Fetch HTTP data ───────────────────────────────────────
@@ -74,7 +80,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
             })
             SCAN_STATUS["tickers_fetched"] += 1
             SCAN_STATUS["live_tickers"].append(ticker)
-            time.sleep(1.5)  # avoid GDELT rate limit (IP-based, no auth)
+            time.sleep(_GDELT_DELAY)
 
         SCAN_STATUS.update({"phase": 2, "phase_label": "Scoring StockTwits trader sentiment (LLM)"})
 
@@ -96,7 +102,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
 
         SCAN_STATUS.update({"phase": 4, "phase_label": "Computing technical indicators, NN & fusion"})
 
-        # ── Phase 4: Technical + NN + fusion ─────────────────────────────
+        # ── Phase 4: Technical + NN + fusion ──────────────────────────────
         logger.info("Phase 4: technical signals + NN + fusion")
         nn_signal.maybe_retrain(session)
         opportunities = []
@@ -131,7 +137,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
             return
 
         # ── Phase 5: Batch LLM — synthesis ────────────────────────────────
-        SCAN_STATUS.update({"phase": 5, "phase_label": f"Generating summaries (LLM)"})
+        SCAN_STATUS.update({"phase": 5, "phase_label": "Generating summaries (LLM)"})
         logger.info("Phase 5: synthesizing %d opportunities", len(opportunities))
         explanations = synthesizer.batch_synthesize(
             [
@@ -212,6 +218,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
 
     finally:
         SCAN_STATUS.update({"running": False, "phase": 0, "phase_label": "idle"})
+        _scan_lock.release()
 
 
 def run_eod_close(session_factory=None):
@@ -233,7 +240,7 @@ def run_eod_close(session_factory=None):
             if alpaca.get_position(trade.ticker) is None:
                 trade.status = "closed"
         except Exception:
-            pass
+            logger.exception("EOD: failed to sync trade status for %s", trade.ticker)
     session.commit()
     session.close()
 

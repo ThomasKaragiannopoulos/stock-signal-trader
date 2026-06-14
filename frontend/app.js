@@ -104,7 +104,7 @@ function buildCard(opp) {
   const confPct = Math.round(conf * 100);
 
   const signalDefs = [
-    { key: "polymarket", label: "StockTwits" },
+    { key: "stocktwits", label: "StockTwits" },
     { key: "gdelt",      label: "GDELT News" },
     { key: "technical",  label: "Technical" },
     { key: "nn",         label: "NN Model" },
@@ -241,7 +241,7 @@ async function triggerScan() {
 
   const selectedTicker = document.getElementById("ticker-filter")?.value;
   const scanPath = selectedTicker ? `/scan?ticker=${selectedTicker}` : "/scan";
-  const scanPromise = api(scanPath).catch(e => { toast(`Scan error: ${e.message}`, "error"); });
+  const scanPromise = api(scanPath, { method: "POST" }).catch(e => { toast(`Scan error: ${e.message}`, "error"); });
 
   // Poll /scan/status every 1.5s while running
   const poll = setInterval(async () => {

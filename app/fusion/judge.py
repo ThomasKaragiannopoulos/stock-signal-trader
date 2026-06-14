@@ -8,6 +8,8 @@ import os
 
 from openai import OpenAI
 
+from app.llm import llm_complete
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +57,8 @@ def batch_judge(items: list[dict], client: OpenAI | None = None) -> list[dict]:
     )
 
     try:
-        resp = client.chat.completions.create(
+        resp = llm_complete(
+            client,
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max(150, 80 * len(items)),

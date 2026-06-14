@@ -5,9 +5,12 @@ use LLM (batched) to score sentiment from human-language posts + explicit bullis
 import json
 import logging
 import os
+import shutil
 import subprocess
 
 from openai import OpenAI
+
+from app.llm import llm_complete
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +21,7 @@ def fetch_posts(ticker: str) -> list[dict]:
     """Fetch StockTwits posts via system curl (bypasses TLS fingerprint block). Returns [] on error."""
     try:
         url = f"https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
-        curl = r"C:\Windows\System32\curl.exe"
+        curl = shutil.which("curl") or "curl"
         result = subprocess.run(
             [curl, "-s", "--max-time", "10", url],
             capture_output=True, timeout=15,
@@ -81,7 +84,8 @@ def batch_score(ticker_posts: list[dict], client: OpenAI) -> list[dict]:
     )
 
     try:
-        resp = client.chat.completions.create(
+        resp = llm_complete(
+            client,
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max(200, 100 * len(ticker_posts)),

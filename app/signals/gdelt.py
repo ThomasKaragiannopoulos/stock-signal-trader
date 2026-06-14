@@ -11,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from openai import OpenAI
 
+from app.llm import llm_complete
+
 logger = logging.getLogger(__name__)
 
 GDELT_BASE = "https://api.gdeltproject.org/api/v2/doc/doc"
@@ -81,7 +83,8 @@ def batch_score(ticker_articles: list[dict], client: OpenAI) -> list[dict]:
     )
 
     try:
-        resp = client.chat.completions.create(
+        resp = llm_complete(
+            client,
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max(200, 100 * len(ticker_articles)),
