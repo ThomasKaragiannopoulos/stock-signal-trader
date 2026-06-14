@@ -73,7 +73,7 @@ def batch_score(ticker_posts: list[dict], client: OpenAI) -> list[dict]:
         "You are analyzing trader sentiment from StockTwits posts. "
         "Posts may include explicit [Bullish] or [Bearish] tags set by the poster.\n"
         "For each ticker, score the overall sentiment for near-term price direction.\n"
-        "Return {\"results\": [...]} where each element is "
+        "Respond with a JSON object: {\"results\": [...]} where each element is "
         "{\"score\": float (-1.0 to 1.0), \"confidence\": float (0.0 to 1.0), \"summary\": str (1 sentence)}.\n"
         "Score: -1.0 = strongly bearish, 0.0 = neutral/mixed, +1.0 = strongly bullish.\n"
         "Confidence: higher when posts are consistent and numerous, lower when mixed or sparse.\n\n"

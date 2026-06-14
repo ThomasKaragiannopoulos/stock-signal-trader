@@ -57,7 +57,7 @@ def batch_score(ticker_articles: list[dict], client: OpenAI) -> list[dict]:
 
     prompt = (
         "For each company's news headlines, score the overall sentiment for the stock's near-term price direction.\n"
-        "Return {\"results\": [...]} where each element is "
+        "Respond with a JSON object: {\"results\": [...]} where each element is "
         "{\"score\": float (-1.0 to 1.0), \"confidence\": float (0.0 to 1.0), \"summary\": str (1 sentence)}.\n\n"
         + "\n\n".join(sections)
     )
@@ -66,7 +66,7 @@ def batch_score(ticker_articles: list[dict], client: OpenAI) -> list[dict]:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=100 * len(ticker_articles),
+            max_tokens=max(200, 100 * len(ticker_articles)),
             temperature=0,
             response_format={"type": "json_object"},
         )
