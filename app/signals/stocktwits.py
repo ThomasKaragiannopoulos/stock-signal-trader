@@ -27,15 +27,20 @@ def fetch_posts(ticker: str) -> list[dict]:
         if not result.stdout:
             return []
         data = json.loads(result.stdout.decode("utf-8", errors="replace"))
-        messages = data.get("messages", []) or []
-        return [
-            {
-                "body": m["body"],
-                "sentiment": (m.get("entities") or {}).get("sentiment", {}).get("basic", ""),
-            }
-            for m in messages[:20]
-            if m and isinstance(m.get("body"), str) and m["body"].strip()
-        ]
+        messages = data.get("messages") or []
+        posts = []
+        for m in messages[:20]:
+            body = m.get("body") if isinstance(m, dict) else None
+            if not body:
+                continue
+            sentiment = ""
+            try:
+                sentiment = m["entities"]["sentiment"]["basic"]
+            except (KeyError, TypeError):
+                pass
+            posts.append({"body": str(body), "sentiment": sentiment})
+        logger.info("StockTwits %s: parsed %d posts from %d messages", ticker, len(posts), len(messages))
+        return posts
     except Exception as e:
         logger.exception("StockTwits fetch failed for %s: %s", ticker, e)
         return []
