@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 WATCHLIST_PATH = Path(__file__).parent.parent / "watchlist.json"
 
+SCAN_STATUS: dict = {"running": False, "phase": 0, "phase_label": "idle", "tickers_total": 0, "tickers_fetched": 0, "opportunities": 0}
+
 TICKER_TO_COMPANY = {
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet Google",
     "AMZN": "Amazon", "NVDA": "Nvidia", "META": "Meta Facebook",
@@ -49,6 +51,8 @@ def run_scan(session_factory=None):
     watchlist = json.loads(WATCHLIST_PATH.read_text())
     session = session_factory()
 
+    SCAN_STATUS.update({"running": True, "phase": 1, "phase_label": "Fetching market & news data", "tickers_total": len(watchlist), "tickers_fetched": 0, "opportunities": 0})
+
     # ── Phase 1: Fetch HTTP data ───────────────────────────────────────────
     logger.info("Phase 1: fetching market + news data for %d tickers", len(watchlist))
     ticker_data = []
@@ -60,6 +64,9 @@ def run_scan(session_factory=None):
             "poly_markets": polymarket.fetch_markets(ticker, company),
             "gdelt_headlines": gdelt.fetch_articles(ticker, company),
         })
+        SCAN_STATUS["tickers_fetched"] += 1
+
+    SCAN_STATUS.update({"phase": 2, "phase_label": "Analyzing Polymarket signals (LLM)"})
 
     # ── Phase 2: Batch LLM — Polymarket picks ─────────────────────────────
     logger.info("Phase 2: batch Polymarket LLM (%d tickers)", len(ticker_data))
@@ -68,12 +75,16 @@ def run_scan(session_factory=None):
         client,
     )
 
+    SCAN_STATUS.update({"phase": 3, "phase_label": "Scoring news sentiment (LLM)"})
+
     # ── Phase 3: Batch LLM — GDELT sentiment ──────────────────────────────
     logger.info("Phase 3: batch GDELT LLM (%d tickers)", len(ticker_data))
     gdelt_signals = gdelt.batch_score(
         [{"ticker": d["ticker"], "headlines": d["gdelt_headlines"]} for d in ticker_data],
         client,
     )
+
+    SCAN_STATUS.update({"phase": 4, "phase_label": "Computing technical indicators & fusion"})
 
     # ── Phase 4: Technical + fusion ───────────────────────────────────────
     logger.info("Phase 4: technical signals + fusion")
@@ -102,11 +113,15 @@ def run_scan(session_factory=None):
             logger.exception("Error processing %s", ticker)
 
     # ── Phase 5: Batch LLM — synthesis ────────────────────────────────────
+    SCAN_STATUS["opportunities"] = len(opportunities)
+
     if not opportunities:
         logger.info("Scan complete: no opportunities found")
+        SCAN_STATUS.update({"running": False, "phase": 0, "phase_label": "idle"})
         session.close()
         return
 
+    SCAN_STATUS.update({"phase": 5, "phase_label": f"Generating explanations for {len(opportunities)} opportunities (LLM)"})
     logger.info("Phase 5: synthesizing %d opportunities", len(opportunities))
     explanations = synthesizer.batch_synthesize(
         [
@@ -152,6 +167,7 @@ def run_scan(session_factory=None):
         session.rollback()
 
     session.close()
+    SCAN_STATUS.update({"running": False, "phase": 0, "phase_label": "idle"})
     logger.info("Scan complete: %d opportunities saved", len(opportunities))
 
 

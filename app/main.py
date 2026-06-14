@@ -14,8 +14,10 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.models import Base, Opportunity, Trade, get_engine, get_session_factory
-from app.scheduler import run_scan, start_scheduler
+from app.scheduler import run_scan, start_scheduler, SCAN_STATUS
 from app.trading import alpaca
+from app.signals import polymarket, gdelt, technical
+from app.fusion import aggregator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -145,6 +147,13 @@ def history(db: Session = Depends(get_db)):
     return [_trade_to_dict(t) for t in trades]
 
 
+# ── Scan status ───────────────────────────────────────────────────────────────
+
+@app.get("/scan/status")
+def scan_status():
+    return SCAN_STATUS
+
+
 # ── Manual scan trigger ───────────────────────────────────────────────────────
 
 @app.get("/scan")
@@ -196,6 +205,19 @@ def _trade_to_dict(t: Trade) -> dict:
         "closed_at": t.closed_at.isoformat() if t.closed_at else None,
         "signal_scores": t.signal_scores,
     }
+
+
+# ── Debug: raw signals for one ticker ─────────────────────────────────────────
+
+@app.get("/debug/{ticker}")
+def debug_ticker(ticker: str):
+    from app.scheduler import TICKER_TO_COMPANY
+    company = TICKER_TO_COMPANY.get(ticker.upper(), ticker.upper())
+    poly = polymarket.get_signal(ticker.upper(), company)
+    gdelt_sig = gdelt.get_signal(ticker.upper(), company)
+    tech = technical.get_signal(ticker.upper())
+    fusion = aggregator.fuse(poly, gdelt_sig, tech)
+    return {"ticker": ticker.upper(), "polymarket": poly, "gdelt": gdelt_sig, "technical": tech, "fusion": fusion}
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────

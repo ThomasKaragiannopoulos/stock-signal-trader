@@ -134,18 +134,53 @@ async function executeTrade(id, btn) {
   }
 }
 
+const PHASE_PCT = { 0: 0, 1: 10, 2: 40, 3: 60, 4: 80, 5: 90 };
+
+function updateProgress(status) {
+  const box = document.getElementById("scan-progress");
+  const label = document.getElementById("scan-phase-label");
+  const counter = document.getElementById("scan-phase-counter");
+  const bar = document.getElementById("scan-progress-bar");
+  if (!box) return;
+
+  if (!status.running) {
+    box.classList.add("hidden");
+    bar.style.width = "0%";
+    return;
+  }
+
+  box.classList.remove("hidden");
+  label.textContent = status.phase_label || "Scanning…";
+  counter.textContent = status.phase === 1
+    ? `${status.tickers_fetched} / ${status.tickers_total} tickers`
+    : status.opportunities > 0 ? `${status.opportunities} opportunities` : `Phase ${status.phase} / 5`;
+  bar.style.width = (PHASE_PCT[status.phase] ?? 0) + "%";
+}
+
 async function triggerScan() {
   const btn = document.getElementById("scan-btn");
   if (btn) { btn.disabled = true; btn.textContent = "Scanning…"; }
-  try {
-    await api("/scan");
-    toast("Scan complete", "success");
-    await loadOpportunities();
-  } catch (e) {
-    toast(`Scan error: ${e.message}`, "error");
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Scan Now"; }
-  }
+
+  // Start scan (returns immediately; scan runs synchronously server-side)
+  // We fire it and poll status
+  const scanPromise = api("/scan").catch(e => { toast(`Scan error: ${e.message}`, "error"); });
+
+  // Poll /scan/status every 1.5s while running
+  const poll = setInterval(async () => {
+    try {
+      const status = await api("/scan/status");
+      updateProgress(status);
+      if (!status.running) {
+        clearInterval(poll);
+        updateProgress({ running: false });
+        toast("Scan complete", "success");
+        await loadOpportunities();
+        if (btn) { btn.disabled = false; btn.textContent = "Scan Now"; }
+      }
+    } catch (_) { clearInterval(poll); }
+  }, 1500);
+
+  await scanPromise;
 }
 
 // ── Portfolio page ────────────────────────────────────────────────────────────
