@@ -41,7 +41,8 @@ app.dependency_overrides[get_db] = override_get_db
 def client():
     mock_scheduler = MagicMock()
     mock_scheduler.shutdown = MagicMock()
-    with patch("app.main.start_scheduler", return_value=mock_scheduler):
+    with patch("app.main.start_scheduler", return_value=mock_scheduler), \
+         patch("app.main.nn_signal.load_model"):
         with TestClient(app) as c:
             yield c
 
@@ -58,8 +59,8 @@ def test_opportunities_with_data(client):
     session = _TestSession()
     opp = Opportunity(
         ticker="AAPL",
-        polymarket_score=0.6,
-        polymarket_confidence=0.7,
+        stocktwits_score=0.6,
+        stocktwits_confidence=0.7,
         gdelt_score=0.5,
         gdelt_confidence=0.6,
         technical_score=0.4,
@@ -91,8 +92,8 @@ def test_trade_neutral_rejected(client):
     session = _TestSession()
     opp = Opportunity(
         ticker="MSFT",
-        polymarket_score=0.0,
-        polymarket_confidence=0.5,
+        stocktwits_score=0.0,
+        stocktwits_confidence=0.5,
         gdelt_score=0.0,
         gdelt_confidence=0.5,
         technical_score=0.0,
@@ -117,8 +118,8 @@ def test_trade_executes(client):
     session = _TestSession()
     opp = Opportunity(
         ticker="NVDA",
-        polymarket_score=0.7,
-        polymarket_confidence=0.8,
+        stocktwits_score=0.7,
+        stocktwits_confidence=0.8,
         gdelt_score=0.6,
         gdelt_confidence=0.7,
         technical_score=0.5,
@@ -142,6 +143,8 @@ def test_trade_executes(client):
         "stop_price": 485.0,
         "target_price": 525.0,
         "side": "buy",
+        "ticker": "NVDA",
+        "direction": "bullish",
     }
     with patch("app.trading.alpaca.submit_bracket_order", return_value=mock_order):
         resp = client.post(f"/trade/{opp_id}")

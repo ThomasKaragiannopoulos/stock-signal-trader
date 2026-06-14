@@ -60,7 +60,7 @@ def maybe_retrain(session) -> None:
         return
 
     X = np.array([
-        [opp.polymarket_score or 0.0, opp.gdelt_score or 0.0, opp.technical_score or 0.0]
+        [opp.stocktwits_score or 0.0, opp.gdelt_score or 0.0, opp.technical_score or 0.0]
         for trade, opp in rows
     ])
     y = np.array([1 if trade.realised_pnl > 0 else 0 for trade, opp in rows])

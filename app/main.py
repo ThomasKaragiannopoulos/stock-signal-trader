@@ -101,7 +101,7 @@ def execute_trade(opportunity_id: int, db: Session = Depends(get_db)):
         target_price=order["target_price"],
         alpaca_order_id=order["alpaca_order_id"],
         signal_scores={
-            "polymarket": opp.polymarket_score,
+            "stocktwits": opp.stocktwits_score,
             "gdelt": opp.gdelt_score,
             "technical": opp.technical_score,
             "fused": opp.fused_score,
@@ -184,7 +184,7 @@ def _opportunity_to_dict(o: Opportunity) -> dict:
         "ticker": o.ticker,
         "scanned_at": o.scanned_at.isoformat() if o.scanned_at else None,
         "signals": {
-            "polymarket": {"score": o.polymarket_score, "confidence": o.polymarket_confidence},
+            "polymarket": {"score": o.stocktwits_score, "confidence": o.stocktwits_confidence},
             "gdelt": {"score": o.gdelt_score, "confidence": o.gdelt_confidence},
             "technical": {"score": o.technical_score, "confidence": o.technical_confidence},
             "nn": {"score": o.nn_score, "confidence": o.nn_confidence},

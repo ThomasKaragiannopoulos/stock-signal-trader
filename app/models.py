@@ -12,8 +12,8 @@ class Opportunity(Base):
     ticker = Column(String, nullable=False)
     scanned_at = Column(DateTime, default=datetime.utcnow)
 
-    polymarket_score = Column(Float)
-    polymarket_confidence = Column(Float)
+    stocktwits_score = Column(Float)
+    stocktwits_confidence = Column(Float)
     gdelt_score = Column(Float)
     gdelt_confidence = Column(Float)
     technical_score = Column(Float)
@@ -68,6 +68,8 @@ def get_engine(db_url: str = "sqlite:///./trader.db"):
 def _migrate(engine) -> None:
     """Add new columns to existing tables without dropping data."""
     new_cols = [
+        ("opportunities", "stocktwits_score", "FLOAT DEFAULT 0"),
+        ("opportunities", "stocktwits_confidence", "FLOAT DEFAULT 0"),
         ("opportunities", "nn_score", "FLOAT DEFAULT 0"),
         ("opportunities", "nn_confidence", "FLOAT DEFAULT 0"),
         ("opportunities", "judge_verdict", "VARCHAR"),

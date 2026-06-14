@@ -1,79 +1,75 @@
 # Stock Signal Trader
 
-Autonomous signal aggregation + LLM reasoning + live paper trading.
-Scans 20 liquid US stocks each morning, fuses 3 independent signals, and surfaces trade opportunities for human approval.
+[![CI](https://github.com/ThomasKaragiannopoulos/stock-signal-trader/actions/workflows/ci.yml/badge.svg)](https://github.com/ThomasKaragiannopoulos/stock-signal-trader/actions/workflows/ci.yml)
 
-## Architecture
+Autonomous signal aggregation, NN-assisted prediction, and LLM-as-judge for live paper trading on 20 liquid US stocks.
+
+## How it works
+
+Each morning at 09:00 EST the scanner runs 6 phases:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Daily Scan (09:00 EST)               │
-├──────────────┬──────────────────┬───────────────────────────┤
-│  Polymarket  │   GDELT News     │   yfinance Technical      │
-│  Gamma API   │   Article Search │   RSI · MACD · MA cross   │
-│  score ±1.0  │   LLM sentiment  │   score ±1.0              │
-│  weight 0.40 │   weight 0.30    │   weight 0.30             │
-└──────┬───────┴────────┬─────────┴────────────┬──────────────┘
-       │                │                      │
-       └────────────────▼──────────────────────┘
-                  Weighted Fusion
-              + Agreement Bonus (+0.15)
-                        │
-                   GPT-4o Synthesis
-                (human-readable note)
-                        │
-             Confidence > 50% → Opportunity
-                        │
-              User clicks Trade ──► Alpaca
-                                   Bracket Order
-                                   SL -3% / TP +5%
+Phase 1  Fetch StockTwits posts + GDELT news headlines (HTTP, no LLM)
+Phase 2  LLM batch — score trader sentiment for all 20 tickers (1 call)
+Phase 3  LLM batch — score news sentiment for all 20 tickers (1 call)
+Phase 4  Technical indicators (RSI, MACD, MA20/50) + NN signal + weighted fusion
+Phase 5  LLM batch — generate 2-sentence plain-English summary per opportunity (1 call)
+Phase 6  LLM judge — sees all 4 signals + summary, outputs trade/skip + reason (1 call)
 ```
 
-## Signal Fusion
+Total: **4 LLM calls** per full scan regardless of watchlist size.
 
-| Signal | Source | Weight |
-|---|---|---|
-| Polymarket | Market-implied probability on adjacent events | 0.40 |
-| GDELT News | LLM sentiment on last 24h headlines | 0.30 |
-| Technical | RSI(14) + MACD crossover + MA20/50 | 0.30 |
+## Signal architecture
 
-If all 3 signals agree in direction, confidence gets a **+0.15 bonus**.
+```
+┌─────────────────┬──────────────────┬─────────────────┬─────────────────┐
+│   StockTwits    │   GDELT News     │   Technical     │   NN Model      │
+│  Trader posts   │  Article Search  │  RSI·MACD·MA    │  sklearn MLP    │
+│  LLM sentiment  │  LLM sentiment   │  rule-based     │  P(profit)      │
+│  weight 0.30    │  weight 0.25     │  weight 0.25    │  weight 0.20    │
+└────────┬────────┴────────┬─────────┴────────┬────────┴────────┬────────┘
+         └─────────────────▼──────────────────▼─────────────────┘
+                     Weighted fusion
+              confidence = Σ(active_confs) / divisor
+              divisor: 4→4.0  3→3.0  2→2.5  1→1.7
+                           │
+                    LLM as Judge
+              trade / skip + 1-sentence reason
+                           │
+                 User reviews → Trade button
+                           │
+                    Alpaca paper order
+               bracket: SL −3% / TP +5%
+```
+
+## Confidence formula
+
+Missing signals are penalised via the divisor rather than by zeroing weights — a single strong signal can still surface an opportunity, but always at a discount.
+
+The NN contributes `confidence=0` until 10 closed trades exist, so it never pollutes results during the cold-start period.
 
 ## Stack
 
-- **Backend**: FastAPI + SQLAlchemy + SQLite
-- **Scheduler**: APScheduler (09:00 scan, 15:55 EOD close)
-- **LLM**: OpenAI GPT-4o
-- **Paper Trading**: Alpaca Markets
-- **Frontend**: Vanilla HTML/CSS/JS (no framework)
+| Layer | Technology |
+|---|---|
+| Backend | FastAPI + SQLAlchemy + SQLite |
+| Scheduler | APScheduler (09:00 scan, 15:55 EOD close) |
+| ML | scikit-learn MLPClassifier |
+| LLM | OpenAI GPT-4o-mini |
+| Paper trading | Alpaca Markets API |
+| Frontend | Vanilla HTML/CSS/JS |
 
 ## Setup
 
 ```bash
 cp .env.example .env
-# Fill in OPENAI_API_KEY, ALPACA_API_KEY, ALPACA_SECRET_KEY
+# Set OPENAI_API_KEY, ALPACA_API_KEY, ALPACA_SECRET_KEY
 
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app
 ```
 
-Open http://localhost:8000
-
-## Pages
-
-- `/` — Opportunities: signal bars, confidence %, LLM explanation, Trade button
-- `/portfolio.html` — Open positions: entry, current price, P&L
-- `/history.html` — Closed trades: outcome, signal scores at entry
-
-## API
-
-```
-GET  /opportunities          # Current opportunities
-POST /trade/{id}             # Execute paper trade
-GET  /portfolio              # Open positions (live from Alpaca)
-GET  /history                # Closed trades
-GET  /scan                   # Manual scan trigger
-```
+Open **http://localhost:8000**
 
 ## Docker
 
@@ -81,16 +77,35 @@ GET  /scan                   # Manual scan trigger
 docker compose up
 ```
 
+## API
+
+```
+GET  /opportunities          # Latest scan results per ticker
+POST /trade/{id}             # Execute paper trade on Alpaca
+GET  /portfolio              # Open positions (live from Alpaca)
+GET  /history                # Closed trades + realised P&L
+GET  /scan?ticker=AAPL       # Trigger scan (all or single ticker)
+GET  /scan/status            # Live phase progress
+GET  /debug/{ticker}         # Raw signals for one ticker
+```
+
+## Frontend pages
+
+- **Opportunities** — signal bars (StockTwits, GDELT, Technical, NN), confidence %, 2-sentence LLM summary, judge verdict (TRADE / SKIP), expandable raw data panel
+- **Portfolio** — open positions, entry price, current price, unrealised P&L
+- **History** — closed trades, realised P&L, signal scores at entry
+
 ## Tests
 
 ```bash
-pip install -r requirements-dev.txt
-pytest -v
+pip install ruff pytest
+ruff check app/ tests/
+pytest tests/ -v
 ```
 
-## Position Sizing
+## Position sizing
 
-- **Size**: 5% of portfolio equity per trade
+- **Per trade**: 5% of portfolio equity
 - **Stop loss**: −3%
 - **Take profit**: +5%
 - **Time horizon**: daily (EOD close if stop/target not hit)

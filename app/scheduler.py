@@ -178,8 +178,8 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
         for o, explanation, verdict in zip(opportunities, explanations, judge_results):
             opp = Opportunity(
                 ticker=o["ticker"],
-                polymarket_score=o["stocktwits"]["score"],
-                polymarket_confidence=o["stocktwits"]["confidence"],
+                stocktwits_score=o["stocktwits"]["score"],
+                stocktwits_confidence=o["stocktwits"]["confidence"],
                 gdelt_score=o["gdelt"]["score"],
                 gdelt_confidence=o["gdelt"]["confidence"],
                 technical_score=o["technical"]["score"],
