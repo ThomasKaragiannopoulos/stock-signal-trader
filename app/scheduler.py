@@ -33,7 +33,7 @@ TICKER_TO_COMPANY = {
 }
 
 
-def run_scan(session_factory=None):
+def run_scan(session_factory=None, tickers: list[str] | None = None):
     """
     Scan all watchlist tickers using batched LLM calls.
 
@@ -53,7 +53,7 @@ def run_scan(session_factory=None):
         return
 
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    watchlist = json.loads(WATCHLIST_PATH.read_text())
+    watchlist = tickers if tickers else json.loads(WATCHLIST_PATH.read_text())
     session = session_factory()
 
     SCAN_STATUS.update({"running": True, "phase": 1, "phase_label": "Fetching market & news data", "tickers_total": len(watchlist), "tickers_fetched": 0, "opportunities": 0})

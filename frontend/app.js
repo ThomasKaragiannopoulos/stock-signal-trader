@@ -180,9 +180,9 @@ async function triggerScan() {
   const btn = document.getElementById("scan-btn");
   if (btn) { btn.disabled = true; btn.textContent = "Scanning…"; }
 
-  // Start scan (returns immediately; scan runs synchronously server-side)
-  // We fire it and poll status
-  const scanPromise = api("/scan").catch(e => { toast(`Scan error: ${e.message}`, "error"); });
+  const selectedTicker = document.getElementById("ticker-filter")?.value;
+  const scanPath = selectedTicker ? `/scan?ticker=${selectedTicker}` : "/scan";
+  const scanPromise = api(scanPath).catch(e => { toast(`Scan error: ${e.message}`, "error"); });
 
   // Poll /scan/status every 1.5s while running
   const poll = setInterval(async () => {

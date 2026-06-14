@@ -7,7 +7,7 @@ load_dotenv()
 from datetime import datetime
 from typing import Generator
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import desc, func
@@ -166,9 +166,10 @@ def scan_status():
 # ── Manual scan trigger ───────────────────────────────────────────────────────
 
 @app.get("/scan")
-def trigger_scan():
+def trigger_scan(ticker: str = Query(default=None)):
     try:
-        run_scan(_SessionFactory)
+        tickers = [ticker.upper()] if ticker else None
+        run_scan(_SessionFactory, tickers=tickers)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"status": "scan complete", "timestamp": datetime.utcnow().isoformat()}
