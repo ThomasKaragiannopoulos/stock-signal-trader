@@ -152,7 +152,7 @@ function updateProgress(status) {
   box.classList.remove("hidden");
   label.textContent = status.phase_label || "Scanning…";
   counter.textContent = status.phase === 1
-    ? `${status.tickers_fetched} / ${status.tickers_total} tickers`
+    ? `${Math.min(status.tickers_fetched, status.tickers_total)} / ${status.tickers_total} tickers`
     : status.opportunities > 0 ? `${status.opportunities} opportunities` : `Phase ${status.phase} / 5`;
   bar.style.width = (PHASE_PCT[status.phase] ?? 0) + "%";
 }

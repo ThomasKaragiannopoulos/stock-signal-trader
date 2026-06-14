@@ -47,6 +47,10 @@ def run_scan(session_factory=None):
         engine = get_engine()
         session_factory = get_session_factory(engine)
 
+    if SCAN_STATUS["running"]:
+        logger.warning("Scan already in progress — skipping concurrent request")
+        return
+
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     watchlist = json.loads(WATCHLIST_PATH.read_text())
     session = session_factory()
