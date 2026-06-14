@@ -15,8 +15,9 @@ def fetch_posts(ticker: str) -> list[dict]:
     """Fetch StockTwits posts via system curl (bypasses TLS fingerprint block). Returns [] on error."""
     try:
         url = f"https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
+        curl = r"C:\Windows\System32\curl.exe"
         result = subprocess.run(
-            ["curl", "-s", "--max-time", "10", url],
+            [curl, "-s", "--max-time", "10", url],
             capture_output=True, timeout=15,
         )
         if not result.stdout:
