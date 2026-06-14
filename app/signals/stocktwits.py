@@ -15,7 +15,8 @@ def fetch_posts(ticker: str) -> list[dict]:
     """HTTP only — fetch StockTwits posts for ticker. Returns [] on error or rate limit."""
     try:
         url = f"https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
-        resp = httpx.get(url, timeout=10)
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
+        resp = httpx.get(url, headers=headers, timeout=10)
         if resp.status_code in (429, 403):
             return []
         resp.raise_for_status()
