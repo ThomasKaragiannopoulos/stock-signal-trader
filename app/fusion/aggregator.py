@@ -1,7 +1,7 @@
 """
 Weighted fusion of three signal scores into a single confidence score + direction.
-Weights: Polymarket 0.4, GDELT 0.3, Technical 0.3
-Agreement bonus: +0.15 if all three signals align in direction.
+Confidence: sum of active signal confidences / divisor (3→3.0, 2→2.5, 1→1.7).
+Missing signals are penalised via the divisor, not by zeroing their weight.
 """
 
 WEIGHTS = {
@@ -9,8 +9,7 @@ WEIGHTS = {
     "gdelt": 0.3,
     "technical": 0.3,
 }
-AGREEMENT_BONUS = 0.15
-OPPORTUNITY_THRESHOLD = 0.50
+_CONF_DIVISOR = {3: 3.0, 2: 2.5, 1: 1.7}
 
 
 def fuse(
@@ -46,27 +45,15 @@ def fuse(
 
     fused_score = (weighted_score / total_weight) if total_weight > 0 else 0.0
 
-    # Base confidence: weighted average of individual confidences.
-    # Only count signals that returned data (confidence > 0); renormalize their weights
-    # so a missing Polymarket signal doesn't cap achievable confidence at 0.6.
+    # Confidence: sum active signal confidences / penalty divisor
     active = {n: s for n, s in signals.items() if s["confidence"] > 0}
-    if active:
-        active_weight_sum = sum(WEIGHTS[n] for n in active)
-        base_confidence = sum(
-            s["confidence"] * WEIGHTS[n] / active_weight_sum for n, s in active.items()
-        )
+    n_active = len(active)
+    if n_active == 0:
+        fused_confidence = 0.0
     else:
-        base_confidence = 0.0
-
-    # Agreement bonus
-    signs = [
-        1 if sig["score"] > 0.05 else (-1 if sig["score"] < -0.05 else 0)
-        for sig in signals.values()
-    ]
-    non_neutral = [s for s in signs if s != 0]
-    all_agree = len(non_neutral) >= 2 and len(set(non_neutral)) == 1
-
-    fused_confidence = min(1.0, base_confidence + (AGREEMENT_BONUS if all_agree else 0.0))
+        total_conf = sum(s["confidence"] for s in active.values())
+        divisor = _CONF_DIVISOR[n_active]
+        fused_confidence = min(1.0, total_conf / divisor)
 
     if fused_score > 0.05:
         direction = "bullish"
@@ -79,5 +66,5 @@ def fuse(
         "fused_score": round(fused_score, 4),
         "fused_confidence": round(fused_confidence, 4),
         "direction": direction,
-        "opportunity": fused_confidence >= OPPORTUNITY_THRESHOLD,
+        "opportunity": True,
     }
