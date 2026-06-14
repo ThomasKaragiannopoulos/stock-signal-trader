@@ -4,23 +4,25 @@ use LLM (batched) to score sentiment from human-language posts + explicit bullis
 """
 import json
 import os
+import subprocess
 
-import httpx
 from openai import OpenAI
 
 _NEUTRAL = {"score": 0.0, "confidence": 0.0, "detail": {"post_count": 0, "summary": "no data"}}
 
 
 def fetch_posts(ticker: str) -> list[dict]:
-    """HTTP only — fetch StockTwits posts for ticker. Returns [] on error or rate limit."""
+    """Fetch StockTwits posts via system curl (bypasses TLS fingerprint block). Returns [] on error."""
     try:
         url = f"https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
-        resp = httpx.get(url, headers=headers, timeout=10)
-        if resp.status_code in (429, 403):
+        result = subprocess.run(
+            ["curl", "-s", "--max-time", "10", url],
+            capture_output=True, timeout=15,
+        )
+        if not result.stdout:
             return []
-        resp.raise_for_status()
-        messages = resp.json().get("messages", []) or []
+        data = json.loads(result.stdout.decode("utf-8", errors="replace"))
+        messages = data.get("messages", []) or []
         return [
             {
                 "body": m.get("body", ""),
