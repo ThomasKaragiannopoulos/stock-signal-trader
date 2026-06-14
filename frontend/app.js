@@ -42,6 +42,16 @@ function signClass(score) {
   return score > 0.05 ? "bullish" : score < -0.05 ? "bearish" : "neutral";
 }
 
+function escHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function toggleDetail(btn) {
+  const panel = btn.closest(".card").querySelector(".see-more-panel");
+  const open = panel.classList.toggle("hidden") === false;
+  btn.textContent = open ? "See less ▴" : "See more ▾";
+}
+
 function setActive(page) {
   document.querySelectorAll("nav a[data-page]").forEach(a => {
     a.classList.toggle("active", a.dataset.page === page);
@@ -116,6 +126,32 @@ function buildCard(opp) {
       </div>`;
   }).join("");
 
+  const detail = opp.signal_detail || {};
+  const posts = detail.stocktwits?.posts || [];
+  const headlines = detail.gdelt?.headlines || [];
+  const tech = detail.technical || {};
+
+  const detailHtml = `
+    <div class="see-more-panel hidden">
+      <div class="detail-section">
+        <div class="detail-title">StockTwits posts (${posts.length})</div>
+        ${posts.length
+          ? posts.map(p => `<div class="detail-item">${p.sentiment ? `<span class="sent-tag ${p.sentiment.toLowerCase()}">${p.sentiment}</span> ` : ""}${escHtml(p.body)}</div>`).join("")
+          : `<div class="detail-item muted">No posts fetched</div>`}
+      </div>
+      <div class="detail-section">
+        <div class="detail-title">GDELT headlines (${headlines.length})</div>
+        ${headlines.length
+          ? headlines.map(h => `<div class="detail-item">— ${escHtml(h)}</div>`).join("")
+          : `<div class="detail-item muted">No headlines fetched</div>`}
+      </div>
+      <div class="detail-section">
+        <div class="detail-title">Technical</div>
+        <div class="detail-item">Price ${tech.price ?? "—"} · MA20 ${tech.ma20 ?? "—"} · MA50 ${tech.ma50 ?? "—"}</div>
+        <div class="detail-item">RSI ${tech.rsi ?? "—"} · MACD ${tech.macd_signal ?? "—"} · MA score ${tech.ma_score ?? "—"}</div>
+      </div>
+    </div>`;
+
   const card = document.createElement("div");
   card.className = "card";
   card.dataset.id = opp.id;
@@ -131,7 +167,11 @@ function buildCard(opp) {
       <div class="conf-track"><div class="conf-fill" style="width:${confPct}%"></div></div>
     </div>
     <p class="explanation">${opp.llm_explanation ?? ""}</p>
-    <span class="scanned">Scanned ${opp.scanned_at ? new Date(opp.scanned_at).toLocaleString() : "—"}</span>
+    <div class="card-footer">
+      <span class="scanned">Scanned ${opp.scanned_at ? new Date(opp.scanned_at).toLocaleString() : "—"}</span>
+      <button class="btn-see-more" onclick="toggleDetail(this)">See more ▾</button>
+    </div>
+    ${detailHtml}
     ${opp.traded
       ? `<button class="btn btn-trade" disabled>Traded</button>`
       : `<button class="btn btn-trade" onclick="executeTrade(${opp.id}, this)">Trade ${dir === "bullish" ? "▲" : "▼"} ${opp.ticker}</button>`
@@ -160,11 +200,13 @@ function updateProgress(status) {
   const label = document.getElementById("scan-phase-label");
   const counter = document.getElementById("scan-phase-counter");
   const bar = document.getElementById("scan-progress-bar");
+  const liveTickers = document.getElementById("scan-live-tickers");
   if (!box) return;
 
   if (!status.running) {
     box.classList.add("hidden");
     bar.style.width = "0%";
+    if (liveTickers) liveTickers.innerHTML = "";
     return;
   }
 
@@ -174,6 +216,10 @@ function updateProgress(status) {
     ? `${Math.min(status.tickers_fetched, status.tickers_total)} / ${status.tickers_total} tickers`
     : status.opportunities > 0 ? `${status.opportunities} opportunities` : `Phase ${status.phase} / 5`;
   bar.style.width = (PHASE_PCT[status.phase] ?? 0) + "%";
+
+  if (liveTickers && status.live_tickers?.length) {
+    liveTickers.innerHTML = status.live_tickers.map(t => `<span class="live-tick">${t}</span>`).join("");
+  }
 }
 
 async function triggerScan() {

@@ -41,9 +41,9 @@ def batch_synthesize(items: list[dict], client: OpenAI | None = None) -> list[st
         )
 
     prompt = (
-        "You are a quantitative analyst. For each opportunity below, write a concise 3-4 sentence "
-        "analyst note covering what each signal indicates, whether they agree, and the key risk.\n"
-        "Respond with a JSON object: {\"explanations\": [\"...\", \"...\"]} with one string per opportunity. No bullet points.\n\n"
+        "For each stock below write exactly 2 short plain-English sentences: what the signals say and the key risk. "
+        "No intro, no 'Based on...', no analyst jargon. Write like you're texting a friend who trades.\n"
+        "Respond with a JSON object: {\"explanations\": [\"...\", \"...\"]} one string per stock.\n\n"
         + "\n\n".join(sections)
     )
 

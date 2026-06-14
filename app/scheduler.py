@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 WATCHLIST_PATH = Path(__file__).parent.parent / "watchlist.json"
 
-SCAN_STATUS: dict = {"running": False, "phase": 0, "phase_label": "idle", "tickers_total": 0, "tickers_fetched": 0, "opportunities": 0}
+SCAN_STATUS: dict = {"running": False, "phase": 0, "phase_label": "idle", "tickers_total": 0, "tickers_fetched": 0, "opportunities": 0, "live_tickers": []}
 
 TICKER_TO_COMPANY = {
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet Google",
@@ -56,7 +56,7 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
     watchlist = tickers if tickers else json.loads(WATCHLIST_PATH.read_text())
     session = session_factory()
 
-    SCAN_STATUS.update({"running": True, "phase": 1, "phase_label": "Fetching market & news data", "tickers_total": len(watchlist), "tickers_fetched": 0, "opportunities": 0})
+    SCAN_STATUS.update({"running": True, "phase": 1, "phase_label": "Fetching market & news data", "tickers_total": len(watchlist), "tickers_fetched": 0, "opportunities": 0, "live_tickers": []})
 
     try:
         # ── Phase 1: Fetch HTTP data ───────────────────────────────────────
@@ -64,13 +64,16 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
         ticker_data = []
         for ticker in watchlist:
             company = TICKER_TO_COMPANY.get(ticker, ticker)
+            st_posts = stocktwits.fetch_posts(ticker)
+            gdelt_headlines = gdelt.fetch_articles(ticker, company)
             ticker_data.append({
                 "ticker": ticker,
                 "company": company,
-                "st_posts": stocktwits.fetch_posts(ticker),
-                "gdelt_headlines": gdelt.fetch_articles(ticker, company),
+                "st_posts": st_posts,
+                "gdelt_headlines": gdelt_headlines,
             })
             SCAN_STATUS["tickers_fetched"] += 1
+            SCAN_STATUS["live_tickers"].append(ticker)
             time.sleep(1.5)  # avoid GDELT rate limit (IP-based, no auth)
 
         SCAN_STATUS.update({"phase": 2, "phase_label": "Scoring StockTwits trader sentiment (LLM)"})
@@ -115,6 +118,8 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
                     "gdelt": gdelt_sig,
                     "technical": tech,
                     "fusion": fusion,
+                    "st_posts": d["st_posts"],
+                    "gdelt_headlines": d["gdelt_headlines"],
                 })
             except Exception:
                 logger.exception("Error processing %s", ticker)
@@ -159,8 +164,8 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
                 direction=o["fusion"]["direction"],
                 llm_explanation=explanation,
                 signal_detail={
-                    "stocktwits": o["stocktwits"]["detail"],
-                    "gdelt": o["gdelt"]["detail"],
+                    "stocktwits": {**o["stocktwits"]["detail"], "posts": o["st_posts"]},
+                    "gdelt": {**o["gdelt"]["detail"], "headlines": o["gdelt_headlines"]},
                     "technical": o["technical"]["detail"],
                 },
             )
