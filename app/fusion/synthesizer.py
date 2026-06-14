@@ -1,8 +1,73 @@
 """
-LLM synthesis: take 3 signal scores + detail and produce a human-readable explanation.
+LLM synthesis: take 3 signal scores + detail and produce human-readable explanations.
+Supports batched calls to minimize API round-trips.
 """
+import json
 import os
+
 from openai import OpenAI
+
+
+def batch_synthesize(items: list[dict], client: OpenAI | None = None) -> list[str]:
+    """
+    Single LLM call to synthesize explanations for multiple opportunities.
+
+    Args:
+        items: list of dicts with keys: ticker, polymarket, gdelt, technical,
+               fused_score, fused_confidence, direction
+    Returns:
+        list of explanation strings in same order
+    """
+    if not items:
+        return []
+
+    if client is None:
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+    sections = []
+    for i, o in enumerate(items):
+        td = o["technical"].get("detail", {})
+        pd = o["polymarket"].get("detail", {})
+        gd = o["gdelt"].get("detail", {})
+        sections.append(
+            f"{i}. {o['ticker']} — {o['direction'].upper()} {o['fused_confidence']:.0%}\n"
+            f"   Polymarket: score={o['polymarket']['score']:+.2f} conf={o['polymarket']['confidence']:.0%}"
+            f" market={pd.get('market_question', 'none')}\n"
+            f"   GDELT: score={o['gdelt']['score']:+.2f} conf={o['gdelt']['confidence']:.0%}"
+            f" ({gd.get('headline_count', 0)} headlines) {gd.get('summary', '')}\n"
+            f"   Technical: RSI={td.get('rsi', 'n/a')} score={o['technical']['score']:+.2f}"
+            f" conf={o['technical']['confidence']:.0%} price={td.get('price', 'n/a')}"
+            f" MA20={td.get('ma20', 'n/a')} MA50={td.get('ma50', 'n/a')}"
+        )
+
+    prompt = (
+        "You are a quantitative analyst. For each opportunity below, write a concise 3-4 sentence "
+        "analyst note covering what each signal indicates, whether they agree, and the key risk.\n"
+        "Return {\"explanations\": [\"...\", \"...\"]} with one string per opportunity. No bullet points.\n\n"
+        + "\n\n".join(sections)
+    )
+
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=250 * len(items),
+            temperature=0.3,
+            response_format={"type": "json_object"},
+        )
+        explanations = json.loads(resp.choices[0].message.content).get("explanations", [])
+    except Exception:
+        explanations = []
+
+    result = []
+    for i, o in enumerate(items):
+        if i < len(explanations) and explanations[i]:
+            result.append(explanations[i])
+        else:
+            result.append(
+                f"{o['ticker']} shows a {o['direction']} signal with {o['fused_confidence']:.0%} confidence."
+            )
+    return result
 
 
 def synthesize(
@@ -14,37 +79,13 @@ def synthesize(
     fused_confidence: float,
     direction: str,
 ) -> str:
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-
-    tech_detail = technical.get("detail", {})
-    poly_detail = polymarket.get("detail", {})
-    gdelt_detail = gdelt.get("detail", {})
-
-    prompt = (
-        f"You are a quantitative analyst reviewing signals for {ticker}.\n\n"
-        f"**Polymarket Signal** (score: {polymarket['score']:+.2f}, confidence: {polymarket['confidence']:.0%})\n"
-        f"Market: {poly_detail.get('market_question', 'N/A')}\n"
-        f"Implied probability: {poly_detail.get('implied_prob', 'N/A')}\n\n"
-        f"**GDELT News Sentiment** (score: {gdelt['score']:+.2f}, confidence: {gdelt['confidence']:.0%})\n"
-        f"Based on {gdelt_detail.get('headline_count', 0)} recent headlines.\n"
-        f"Summary: {gdelt_detail.get('summary', 'N/A')}\n\n"
-        f"**Technical Indicators** (score: {technical['score']:+.2f}, confidence: {technical['confidence']:.0%})\n"
-        f"RSI: {tech_detail.get('rsi', 'N/A')} | "
-        f"MACD signal: {tech_detail.get('macd_signal', 'N/A')} | "
-        f"MA score: {tech_detail.get('ma_score', 'N/A')}\n"
-        f"Price: {tech_detail.get('price', 'N/A')} | "
-        f"MA20: {tech_detail.get('ma20', 'N/A')} | "
-        f"MA50: {tech_detail.get('ma50', 'N/A')}\n\n"
-        f"**Fused result**: {direction.upper()} | score {fused_score:+.2f} | confidence {fused_confidence:.0%}\n\n"
-        "Write a concise (3-5 sentence) analyst note explaining this opportunity. "
-        "Cover what each signal says, whether they agree, and the key risk. "
-        "Be direct and factual. No bullet points."
-    )
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=250,
-        temperature=0.3,
-    )
-    return response.choices[0].message.content.strip()
+    """Single-ticker interface — used by tests and /debug endpoint."""
+    return batch_synthesize([{
+        "ticker": ticker,
+        "polymarket": polymarket,
+        "gdelt": gdelt,
+        "technical": technical,
+        "fused_score": fused_score,
+        "fused_confidence": fused_confidence,
+        "direction": direction,
+    }])[0]

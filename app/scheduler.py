@@ -1,12 +1,15 @@
 """
 APScheduler: daily morning scan at 09:00 EST + EOD close at 15:55 EST.
+Scan uses batched LLM calls: 3 total instead of ~60.
 """
 import json
 import logging
+import os
 from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from openai import OpenAI
 
 from app.signals import polymarket, gdelt, technical
 from app.fusion import aggregator, synthesizer
@@ -28,63 +31,128 @@ TICKER_TO_COMPANY = {
 
 
 def run_scan(session_factory=None):
-    """Scan all watchlist tickers and persist opportunities."""
+    """
+    Scan all watchlist tickers using batched LLM calls.
+
+    Phases:
+      1. Fetch all Polymarket markets + GDELT headlines (HTTP, no LLM)
+      2. One LLM call — pick best Polymarket market for all tickers
+      3. One LLM call — score GDELT sentiment for all tickers
+      4. Technical indicators + fusion (local, no API)
+      5. One LLM call — synthesize explanations for opportunities only
+    """
     if session_factory is None:
         engine = get_engine()
         session_factory = get_session_factory(engine)
 
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     watchlist = json.loads(WATCHLIST_PATH.read_text())
     session = session_factory()
 
+    # ── Phase 1: Fetch HTTP data ───────────────────────────────────────────
+    logger.info("Phase 1: fetching market + news data for %d tickers", len(watchlist))
+    ticker_data = []
     for ticker in watchlist:
         company = TICKER_TO_COMPANY.get(ticker, ticker)
-        logger.info("Scanning %s", ticker)
-        try:
-            poly = polymarket.get_signal(ticker, company)
-            gdelt_sig = gdelt.get_signal(ticker, company)
-            tech = technical.get_signal(ticker)
+        ticker_data.append({
+            "ticker": ticker,
+            "company": company,
+            "poly_markets": polymarket.fetch_markets(ticker, company),
+            "gdelt_headlines": gdelt.fetch_articles(ticker, company),
+        })
 
-            fusion = aggregator.fuse(poly, gdelt_sig, tech)
+    # ── Phase 2: Batch LLM — Polymarket picks ─────────────────────────────
+    logger.info("Phase 2: batch Polymarket LLM (%d tickers)", len(ticker_data))
+    poly_signals = polymarket.batch_score(
+        [{"ticker": d["ticker"], "markets": d["poly_markets"]} for d in ticker_data],
+        client,
+    )
+
+    # ── Phase 3: Batch LLM — GDELT sentiment ──────────────────────────────
+    logger.info("Phase 3: batch GDELT LLM (%d tickers)", len(ticker_data))
+    gdelt_signals = gdelt.batch_score(
+        [{"ticker": d["ticker"], "headlines": d["gdelt_headlines"]} for d in ticker_data],
+        client,
+    )
+
+    # ── Phase 4: Technical + fusion ───────────────────────────────────────
+    logger.info("Phase 4: technical signals + fusion")
+    opportunities = []
+    for i, d in enumerate(ticker_data):
+        ticker = d["ticker"]
+        try:
+            tech = technical.get_signal(ticker)
+            poly_sig = poly_signals[i] if i < len(poly_signals) else {"score": 0.0, "confidence": 0.0, "detail": {}}
+            gdelt_sig = gdelt_signals[i] if i < len(gdelt_signals) else {"score": 0.0, "confidence": 0.0, "detail": {}}
+            fusion = aggregator.fuse(poly_sig, gdelt_sig, tech)
+
             if not fusion["opportunity"]:
                 logger.info("%s: confidence %.0f%% — skipping", ticker, fusion["fused_confidence"] * 100)
                 continue
 
-            explanation = synthesizer.synthesize(
-                ticker=ticker,
-                polymarket=poly,
-                gdelt=gdelt_sig,
-                technical=tech,
-                fused_score=fusion["fused_score"],
-                fused_confidence=fusion["fused_confidence"],
-                direction=fusion["direction"],
-            )
-
-            opp = Opportunity(
-                ticker=ticker,
-                polymarket_score=poly["score"],
-                polymarket_confidence=poly["confidence"],
-                gdelt_score=gdelt_sig["score"],
-                gdelt_confidence=gdelt_sig["confidence"],
-                technical_score=tech["score"],
-                technical_confidence=tech["confidence"],
-                fused_score=fusion["fused_score"],
-                fused_confidence=fusion["fused_confidence"],
-                direction=fusion["direction"],
-                llm_explanation=explanation,
-                signal_detail={
-                    "polymarket": poly["detail"],
-                    "gdelt": gdelt_sig["detail"],
-                    "technical": tech["detail"],
-                },
-            )
-            session.add(opp)
-            session.commit()
             logger.info("%s: %s %.0f%%", ticker, fusion["direction"], fusion["fused_confidence"] * 100)
+            opportunities.append({
+                "ticker": ticker,
+                "polymarket": poly_sig,
+                "gdelt": gdelt_sig,
+                "technical": tech,
+                "fusion": fusion,
+            })
         except Exception:
-            logger.exception("Error scanning %s", ticker)
-            session.rollback()
+            logger.exception("Error processing %s", ticker)
+
+    # ── Phase 5: Batch LLM — synthesis ────────────────────────────────────
+    if not opportunities:
+        logger.info("Scan complete: no opportunities found")
+        session.close()
+        return
+
+    logger.info("Phase 5: synthesizing %d opportunities", len(opportunities))
+    explanations = synthesizer.batch_synthesize(
+        [
+            {
+                "ticker": o["ticker"],
+                "polymarket": o["polymarket"],
+                "gdelt": o["gdelt"],
+                "technical": o["technical"],
+                "fused_score": o["fusion"]["fused_score"],
+                "fused_confidence": o["fusion"]["fused_confidence"],
+                "direction": o["fusion"]["direction"],
+            }
+            for o in opportunities
+        ],
+        client,
+    )
+
+    for o, explanation in zip(opportunities, explanations):
+        opp = Opportunity(
+            ticker=o["ticker"],
+            polymarket_score=o["polymarket"]["score"],
+            polymarket_confidence=o["polymarket"]["confidence"],
+            gdelt_score=o["gdelt"]["score"],
+            gdelt_confidence=o["gdelt"]["confidence"],
+            technical_score=o["technical"]["score"],
+            technical_confidence=o["technical"]["confidence"],
+            fused_score=o["fusion"]["fused_score"],
+            fused_confidence=o["fusion"]["fused_confidence"],
+            direction=o["fusion"]["direction"],
+            llm_explanation=explanation,
+            signal_detail={
+                "polymarket": o["polymarket"]["detail"],
+                "gdelt": o["gdelt"]["detail"],
+                "technical": o["technical"]["detail"],
+            },
+        )
+        session.add(opp)
+
+    try:
+        session.commit()
+    except Exception:
+        logger.exception("Failed to commit opportunities")
+        session.rollback()
 
     session.close()
+    logger.info("Scan complete: %d opportunities saved", len(opportunities))
 
 
 def run_eod_close(session_factory=None):
@@ -101,11 +169,9 @@ def run_eod_close(session_factory=None):
 
     from app.models import Trade
     session = session_factory()
-    open_trades = session.query(Trade).filter_by(status="open").all()
-    for trade in open_trades:
+    for trade in session.query(Trade).filter_by(status="open").all():
         try:
-            pos = alpaca.get_position(trade.ticker)
-            if pos is None:
+            if alpaca.get_position(trade.ticker) is None:
                 trade.status = "closed"
         except Exception:
             pass
