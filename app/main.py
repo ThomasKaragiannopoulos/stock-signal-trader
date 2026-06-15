@@ -3,23 +3,23 @@ import logging
 import os
 import threading
 from contextlib import asynccontextmanager
-
-from dotenv import load_dotenv
-load_dotenv()
 from datetime import datetime
 from typing import Generator
 
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import desc, func, text
 from sqlalchemy.orm import Session
 
-from app.models import Base, Opportunity, PortfolioSnapshot, Trade, get_engine, get_session_factory
-from app.scheduler import run_scan, start_scheduler, SCAN_STATUS, WATCHLIST_PATH
-from app.trading import alpaca
-from app.signals import stocktwits, gdelt, technical, nn_signal
+load_dotenv()
+
 from app.fusion import aggregator
+from app.models import Base, Opportunity, PortfolioSnapshot, Trade, get_engine, get_session_factory
+from app.scheduler import SCAN_STATUS, WATCHLIST_PATH, run_scan, start_scheduler
+from app.signals import gdelt, nn_signal, stocktwits, technical
+from app.trading import alpaca
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
