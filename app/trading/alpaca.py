@@ -69,13 +69,13 @@ def submit_bracket_order(ticker: str, direction: str, confidence: float = 1.0) -
         raise ValueError("Position size is zero after confidence scaling and exposure limits")
 
     price = get_latest_price(ticker)
-    qty = round(notional / price, 4)
+    qty = int(notional / price)  # whole shares only — Alpaca bracket orders don't support fractional
     if qty <= 0:
         raise ValueError("Quantity is zero after position sizing")
 
     side = "buy" if direction == "bullish" else "sell"
-    stop_price = round(price * (1 - STOP_LOSS_PCT) if side == "buy" else price * (1 + STOP_LOSS_PCT), 4)
-    take_profit_price = round(price * (1 + TAKE_PROFIT_PCT) if side == "buy" else price * (1 - TAKE_PROFIT_PCT), 4)
+    stop_price = round(price * (1 - STOP_LOSS_PCT) if side == "buy" else price * (1 + STOP_LOSS_PCT), 2)
+    take_profit_price = round(price * (1 + TAKE_PROFIT_PCT) if side == "buy" else price * (1 - TAKE_PROFIT_PCT), 2)
 
     order_payload = {
         "symbol": ticker,
