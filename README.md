@@ -39,6 +39,7 @@ Total: **4 LLM calls** per full scan regardless of watchlist size.
                  User reviews → Trade button
                            │
                     Alpaca paper order
+          notional = equity × 2% × confidence
                bracket: SL −3% / TP +5%
 ```
 
@@ -112,7 +113,22 @@ pytest tests/ -v
 
 ## Position sizing
 
-- **Per trade**: 5% of portfolio equity
-- **Stop loss**: −3%
-- **Take profit**: +5%
-- **Time horizon**: daily (EOD close if stop/target not hit)
+Notional is scaled by signal confidence before the order is placed:
+
+```
+base_notional = equity × POSITION_SIZE_PCT          # default 2%
+notional      = min(base_notional × confidence, remaining_exposure)
+```
+
+A confidence of 0.5 halves the position; 1.0 uses the full base allocation.
+Remaining exposure = `MAX_TOTAL_EXPOSURE_PCT` (20%) minus current open exposure.
+
+| Parameter | Default | Env var |
+|---|---|---|
+| Base allocation | 2% of equity | `POSITION_SIZE_PCT` |
+| Max open positions | 5 | `MAX_OPEN_POSITIONS` |
+| Max total exposure | 20% of equity | `MAX_TOTAL_EXPOSURE_PCT` |
+| Stop loss | −3% | `STOP_LOSS_PCT` |
+| Take profit | +5% | `TAKE_PROFIT_PCT` |
+
+**Time horizon**: daily — EOD close at 15:55 EST if stop/target not hit by market close.
