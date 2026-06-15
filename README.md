@@ -53,7 +53,7 @@ The NN contributes `confidence=0` until 10 closed trades exist, so it never poll
 | Layer | Technology |
 |---|---|
 | Backend | FastAPI + SQLAlchemy + SQLite |
-| Scheduler | APScheduler (09:00 scan, 15:55 EOD close) |
+| Scheduler | APScheduler (09:00 scan, 15:55 EOD close, 16:00 snapshot) |
 | ML | scikit-learn MLPClassifier |
 | LLM | OpenAI GPT-4o-mini |
 | Paper trading | Alpaca Markets API |
@@ -80,20 +80,27 @@ docker compose up
 ## API
 
 ```
-GET  /opportunities          # Latest scan results per ticker
-POST /trade/{id}             # Execute paper trade on Alpaca
-GET  /portfolio              # Open positions (live from Alpaca)
-GET  /history                # Closed trades + realised P&L
-GET  /scan?ticker=AAPL       # Trigger scan (all or single ticker)
-GET  /scan/status            # Live phase progress
-GET  /debug/{ticker}         # Raw signals for one ticker
+GET    /opportunities            # Latest scan results per ticker
+GET    /opportunities/{id}       # Single opportunity + linked trade
+POST   /trade/{id}               # Execute paper trade on Alpaca
+GET    /portfolio                # Open positions (live from Alpaca)
+GET    /history                  # Closed trades + realised P&L
+GET    /snapshots                # Daily equity/cash snapshots (for equity curve)
+GET    /scan?ticker=AAPL         # Trigger scan (all or single ticker)
+GET    /scan/status              # Live phase progress
+GET    /debug/{ticker}           # Raw signals for one ticker
+GET    /watchlist                # Current watchlist [{ticker, company}]
+POST   /watchlist                # Add ticker to watchlist
+DELETE /watchlist/{ticker}       # Remove ticker from watchlist
 ```
 
 ## Frontend pages
 
-- **Opportunities** — signal bars (StockTwits, GDELT, Technical, NN), confidence %, 2-sentence LLM summary, judge verdict (TRADE / SKIP), expandable raw data panel
-- **Portfolio** — open positions, entry price, current price, unrealised P&L
-- **History** — closed trades, realised P&L, signal scores at entry
+- **Overview** (`/`) — live equity curve, open positions, last 5 closed trades
+- **Today's Scan** (`/scan.html`) — signal cards per ticker with bars (StockTwits, GDELT, Technical, NN), confidence %, LLM summary, judge verdict (TRADE / SKIP)
+- **History** (`/history.html`) — full closed-trade table with analytics: win rate, total P&L, avg per trade, cumulative P&L chart
+- **Settings** (`/settings.html`) — editable watchlist; changes take effect on next scan
+- **Detail** (`/detail.html?id=`) — drilldown per opportunity: all signal panels, raw data, trade execution, P&L if closed
 
 ## Tests
 

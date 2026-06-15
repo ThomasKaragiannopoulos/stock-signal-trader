@@ -1,6 +1,7 @@
 """FastAPI route tests using TestClient with in-memory SQLite and dependency overrides."""
 import os
 import pytest
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -83,6 +84,52 @@ def test_opportunities_with_data(client):
     assert aapl["direction"] == "bullish"
 
 
+def test_opportunity_detail_uses_latest_untraded_scan(client):
+    session = _TestSession()
+    old = Opportunity(
+        ticker="STALE",
+        scanned_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        stocktwits_score=0.0,
+        stocktwits_confidence=0.0,
+        gdelt_score=0.0,
+        gdelt_confidence=0.0,
+        technical_score=0.0,
+        technical_confidence=0.0,
+        fused_score=0.0,
+        fused_confidence=0.0,
+        direction="neutral",
+        signal_detail={"stocktwits": {"posts": []}, "gdelt": {"headlines": []}},
+    )
+    new = Opportunity(
+        ticker="STALE",
+        scanned_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        stocktwits_score=0.7,
+        stocktwits_confidence=0.8,
+        gdelt_score=0.4,
+        gdelt_confidence=0.6,
+        technical_score=0.2,
+        technical_confidence=0.3,
+        fused_score=0.5,
+        fused_confidence=0.7,
+        direction="bullish",
+        signal_detail={
+            "stocktwits": {"posts": [{"body": "bullish", "sentiment": "Bullish"}]},
+            "gdelt": {"headlines": ["headline"]},
+        },
+    )
+    session.add_all([old, new])
+    session.commit()
+    old_id = old.id
+    session.close()
+
+    resp = client.get(f"/opportunities/{old_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["signals"]["stocktwits"]["score"] == 0.7
+    assert len(data["signal_detail"]["stocktwits"]["posts"]) == 1
+    assert len(data["signal_detail"]["gdelt"]["headlines"]) == 1
+
+
 def test_trade_not_found(client):
     resp = client.post("/trade/9999")
     assert resp.status_code == 404
@@ -146,12 +193,13 @@ def test_trade_executes(client):
         "ticker": "NVDA",
         "direction": "bullish",
     }
-    with patch("app.trading.alpaca.submit_bracket_order", return_value=mock_order):
+    with patch("app.trading.alpaca.submit_bracket_order", return_value=mock_order) as submit:
         resp = client.post(f"/trade/{opp_id}")
     assert resp.status_code == 200
     data = resp.json()
     assert data["ticker"] == "NVDA"
     assert data["alpaca_order_id"] == "order-123"
+    submit.assert_called_once_with("NVDA", "bullish", confidence=0.72)
 
 
 def test_trade_already_traded(client):

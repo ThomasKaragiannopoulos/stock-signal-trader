@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Signal Trader — Scan</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand">Signal Trader</a>
+    <a href="/" data-page="overview">Overview</a>
+    <a href="/scan.html" data-page="scan" class="active">Scan</a>
+    <a href="/history.html" data-page="history">History</a>
+    <a href="/settings.html" data-page="settings">Settings</a>
+  </nav>
+
+  <main>
+    <div class="toolbar">
+      <div>
+        <h1>Today's Scan</h1>
+        <p class="subtitle">Signal-fused trade candidates with LLM analysis.</p>
+      </div>
+      <div style="display:flex;gap:0.75rem;align-items:center;">
+        <select id="ticker-filter" class="ticker-select" onchange="filterScanCards()">
+          <option value="">All tickers</option>
+        </select>
+        <button id="scan-btn" class="btn btn-scan" onclick="triggerScan()">Scan Now</button>
+      </div>
+    </div>
+
+    <div id="scan-progress" class="scan-progress hidden">
+      <div class="scan-progress-header">
+        <span id="scan-phase-label">Scanning…</span>
+        <span id="scan-phase-counter"></span>
+      </div>
+      <div class="scan-progress-track">
+        <div id="scan-progress-bar" class="scan-progress-fill" style="width:0%"></div>
+      </div>
+      <div id="scan-live-tickers" class="scan-live-tickers"></div>
+    </div>
+
+    <div id="scan-cards" class="cards">
+      <p class="empty">Loading…</p>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+  <script src="app.js"></script>
+  <script>loadScan();</script>
+</body>
+</html>

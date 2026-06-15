@@ -38,6 +38,12 @@ class Opportunity(Base):
 
     traded = Column(Boolean, default=False)
 
+    entry_price = Column(Float)
+    outcome_price = Column(Float)
+    outcome_pnl_pct = Column(Float)
+    outcome_status = Column(String, default="open")  # "open" | "closed"
+    outcome_recorded_at = Column(DateTime)
+
 
 class Trade(Base):
     __tablename__ = "trades"
@@ -69,6 +75,18 @@ class Trade(Base):
     signal_scores = Column(JSON)
 
 
+class PortfolioSnapshot(Base):
+    __tablename__ = "portfolio_snapshots"
+    __table_args__ = (
+        Index("ix_snapshot_recorded_at", "recorded_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    recorded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    equity = Column(Float, nullable=False)
+    cash = Column(Float, nullable=False)
+
+
 def get_engine(db_url: str = "sqlite:///./trader.db"):
     engine = create_engine(db_url, connect_args={"check_same_thread": False})
     _migrate(engine)
@@ -84,6 +102,11 @@ def _migrate(engine) -> None:
         ("opportunities", "nn_confidence", "FLOAT DEFAULT 0"),
         ("opportunities", "judge_verdict", "VARCHAR"),
         ("opportunities", "judge_reason", "TEXT"),
+        ("opportunities", "entry_price", "FLOAT"),
+        ("opportunities", "outcome_price", "FLOAT"),
+        ("opportunities", "outcome_pnl_pct", "FLOAT"),
+        ("opportunities", "outcome_status", "VARCHAR DEFAULT 'open'"),
+        ("opportunities", "outcome_recorded_at", "DATETIME"),
     ]
     new_indices = [
         ("ix_opp_ticker", "opportunities", "ticker"),

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Signal Trader — Settings</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand">Signal Trader</a>
+    <a href="/" data-page="overview">Overview</a>
+    <a href="/scan.html" data-page="scan">Scan</a>
+    <a href="/history.html" data-page="history">History</a>
+    <a href="/settings.html" data-page="settings" class="active">Settings</a>
+  </nav>
+
+  <main>
+    <h1>Settings</h1>
+    <p class="subtitle">Manage your watchlist. Changes take effect on the next scan.</p>
+
+    <div class="settings-section">
+      <h2 class="section-title">Watchlist <span id="watchlist-count" class="section-count"></span></h2>
+
+      <div class="add-ticker-form">
+        <input id="new-ticker" type="text" placeholder="TICKER" class="input-field input-ticker"
+               maxlength="10" oninput="this.value = this.value.toUpperCase()" />
+        <input id="new-company" type="text" placeholder="Company name" class="input-field input-company" />
+        <button class="btn btn-add" onclick="addTicker()">+ Add</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="watchlist-body">
+          <tr><td colspan="3" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+  <script src="app.js"></script>
+  <script>loadSettings();</script>
+</body>
+</html>

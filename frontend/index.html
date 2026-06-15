@@ -3,56 +3,84 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stock Signal Trader — Opportunities</title>
+  <title>Stock Signal Trader — Overview</title>
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <nav>
     <a href="/" class="brand">Signal Trader</a>
-    <a href="/" data-page="opportunities" class="active">Opportunities</a>
-    <a href="/portfolio.html" data-page="portfolio">Portfolio</a>
+    <a href="/" data-page="overview" class="active">Overview</a>
+    <a href="/scan.html" data-page="scan">Scan</a>
     <a href="/history.html" data-page="history">History</a>
+    <a href="/settings.html" data-page="settings">Settings</a>
   </nav>
 
   <main>
     <div class="toolbar">
       <div>
-        <h1>Opportunities</h1>
-        <p class="subtitle">Signal-fused trade candidates with LLM analysis. Confidence &gt; 50% shown.</p>
-      </div>
-      <div style="display:flex;gap:0.75rem;align-items:center;">
-        <select id="ticker-filter" class="ticker-select" onchange="filterCards()">
-          <option value="">All tickers</option>
-          <option>AAPL</option><option>MSFT</option><option>GOOGL</option>
-          <option>AMZN</option><option>NVDA</option><option>META</option>
-          <option>TSLA</option><option>JPM</option><option>V</option>
-          <option>MA</option><option>UNH</option><option>HD</option>
-          <option>PG</option><option>JNJ</option><option>XOM</option>
-          <option>BAC</option><option>DIS</option><option>NFLX</option>
-          <option>AMD</option><option>PYPL</option>
-        </select>
-        <button id="scan-btn" class="btn btn-scan" onclick="triggerScan()">Scan Now</button>
+        <h1>Overview</h1>
+        <p class="subtitle">Portfolio snapshot and recent activity.</p>
       </div>
     </div>
 
-    <div id="scan-progress" class="scan-progress hidden">
-      <div class="scan-progress-header">
-        <span id="scan-phase-label">Scanning…</span>
-        <span id="scan-phase-counter"></span>
-      </div>
-      <div class="scan-progress-track">
-        <div id="scan-progress-bar" class="scan-progress-fill" style="width:0%"></div>
-      </div>
-      <div id="scan-live-tickers" class="scan-live-tickers"></div>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Equity</div><div class="stat-value" id="stat-equity">—</div></div>
+      <div class="stat"><div class="stat-label">Cash</div><div class="stat-value" id="stat-cash">—</div></div>
+      <div class="stat"><div class="stat-label">Open P&L</div><div class="stat-value" id="stat-open-pnl">—</div></div>
+      <div class="stat"><div class="stat-label">Win Rate</div><div class="stat-value" id="stat-win-rate">—</div></div>
+      <div class="stat"><div class="stat-label">Closed Trades</div><div class="stat-value" id="stat-trades">—</div></div>
     </div>
 
-    <div id="cards" class="cards">
-      <p class="empty">Loading…</p>
+    <div class="chart-card">
+      <div class="chart-header">Equity Curve</div>
+      <div class="chart-wrap">
+        <canvas id="equity-chart"></canvas>
+      </div>
+      <p class="chart-empty hidden" id="equity-empty">No snapshots yet — equity is recorded daily at 16:00 EST.</p>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <h2 class="section-title">Open Positions</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Side</th>
+              <th>Entry</th>
+              <th>Current</th>
+              <th>P&L</th>
+              <th>P&L %</th>
+            </tr>
+          </thead>
+          <tbody id="positions-body">
+            <tr><td colspan="6" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h2 class="section-title">Recent Trades</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Dir</th>
+              <th>P&L</th>
+              <th>Closed</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="recent-trades-body">
+            <tr><td colspan="5" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </main>
 
   <div id="toast"></div>
   <script src="app.js"></script>
-  <script>loadOpportunities();</script>
+  <script>loadOverview();</script>
 </body>
 </html>

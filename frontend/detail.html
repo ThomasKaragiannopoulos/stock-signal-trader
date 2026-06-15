@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Signal Trader — Detail</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand">Signal Trader</a>
+    <a href="/" data-page="overview">Overview</a>
+    <a href="/scan.html" data-page="scan">Scan</a>
+    <a href="/history.html" data-page="history">History</a>
+    <a href="/settings.html" data-page="settings">Settings</a>
+  </nav>
+
+  <main>
+    <button class="btn-back" onclick="history.back()">← Back</button>
+    <div id="detail-content">
+      <p class="empty">Loading…</p>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+  <script src="app.js"></script>
+  <script>loadDetail();</script>
+</body>
+</html>

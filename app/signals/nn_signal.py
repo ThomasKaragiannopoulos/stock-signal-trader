@@ -43,16 +43,15 @@ def load_model() -> None:
 
 
 def maybe_retrain(session) -> None:
-    """Retrain if new closed trades exist since last training."""
+    """Retrain if new closed opportunity outcomes exist since last training."""
     global _model, _scaler, _trained_on, _trained_at
     with _lock:
-        from app.models import Opportunity, Trade
+        from app.models import Opportunity
 
         rows = (
-            session.query(Trade, Opportunity)
-            .join(Opportunity, Trade.opportunity_id == Opportunity.id)
-            .filter(Trade.status == "closed")
-            .filter(Trade.realised_pnl.isnot(None))
+            session.query(Opportunity)
+            .filter(Opportunity.outcome_status == "closed")
+            .filter(Opportunity.outcome_pnl_pct.isnot(None))
             .all()
         )
 
@@ -71,9 +70,13 @@ def maybe_retrain(session) -> None:
 
         X = np.array([
             [opp.stocktwits_score or 0.0, opp.gdelt_score or 0.0, opp.technical_score or 0.0]
-            for trade, opp in rows
+            for opp in rows
         ])
-        y = np.array([1 if trade.realised_pnl > 0 else 0 for trade, opp in rows])
+        y = np.array([1 if opp.outcome_pnl_pct > 0 else 0 for opp in rows])
+        if len(set(y.tolist())) < 2:
+            logger.info("NN: closed outcomes have only one class — waiting for mixed wins/losses")
+            _trained_on = n
+            return
 
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)

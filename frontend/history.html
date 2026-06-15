@@ -5,18 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stock Signal Trader — History</title>
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <nav>
     <a href="/" class="brand">Signal Trader</a>
-    <a href="/" data-page="opportunities">Opportunities</a>
-    <a href="/portfolio.html" data-page="portfolio">Portfolio</a>
+    <a href="/" data-page="overview">Overview</a>
+    <a href="/scan.html" data-page="scan">Scan</a>
     <a href="/history.html" data-page="history" class="active">History</a>
+    <a href="/settings.html" data-page="settings">Settings</a>
   </nav>
 
   <main>
     <h1>Trade History</h1>
     <p class="subtitle">All closed trades — outcomes, P&amp;L, and signal scores at entry.</p>
+
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Total Trades</div><div class="stat-value" id="h-total">—</div></div>
+      <div class="stat"><div class="stat-label">Win Rate</div><div class="stat-value" id="h-winrate">—</div></div>
+      <div class="stat"><div class="stat-label">Total P&L</div><div class="stat-value" id="h-total-pnl">—</div></div>
+      <div class="stat"><div class="stat-label">Avg per Trade</div><div class="stat-value" id="h-avg-pnl">—</div></div>
+      <div class="stat"><div class="stat-label">Best Trade</div><div class="stat-value" id="h-best">—</div></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">Cumulative P&L</div>
+      <div class="chart-wrap">
+        <canvas id="pnl-chart"></canvas>
+      </div>
+    </div>
 
     <table>
       <thead>
@@ -26,13 +43,14 @@
           <th>Entry</th>
           <th>Exit</th>
           <th>Qty</th>
-          <th>Realised P&amp;L</th>
+          <th>Realised P&L</th>
           <th>Fused Score</th>
           <th>Closed</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="history-body">
-        <tr><td colspan="8" class="empty">Loading…</td></tr>
+        <tr><td colspan="9" class="empty">Loading…</td></tr>
       </tbody>
     </table>
   </main>

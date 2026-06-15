@@ -1,5 +1,7 @@
+import json
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -13,8 +15,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import desc, func, text
 from sqlalchemy.orm import Session
 
-from app.models import Base, Opportunity, Trade, get_engine, get_session_factory
-from app.scheduler import run_scan, start_scheduler, SCAN_STATUS
+from app.models import Base, Opportunity, PortfolioSnapshot, Trade, get_engine, get_session_factory
+from app.scheduler import run_scan, start_scheduler, SCAN_STATUS, WATCHLIST_PATH
 from app.trading import alpaca
 from app.signals import stocktwits, gdelt, technical, nn_signal
 from app.fusion import aggregator
@@ -25,6 +27,7 @@ logger = logging.getLogger(__name__)
 engine = get_engine(os.getenv("DATABASE_URL", "sqlite:///./trader.db"))
 Base.metadata.create_all(engine)
 _SessionFactory = get_session_factory(engine)
+_watchlist_lock = threading.Lock()
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -77,6 +80,26 @@ def list_opportunities(db: Session = Depends(get_db)):
     return [_opportunity_to_dict(o) for o in rows]
 
 
+@app.get("/opportunities/{opportunity_id}")
+def get_opportunity(opportunity_id: int, db: Session = Depends(get_db)):
+    opp = db.query(Opportunity).filter_by(id=opportunity_id).first()
+    if opp is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    trade = db.query(Trade).filter_by(opportunity_id=opportunity_id).first()
+    if trade is None:
+        latest = (
+            db.query(Opportunity)
+            .filter_by(ticker=opp.ticker)
+            .order_by(desc(Opportunity.scanned_at), desc(Opportunity.id))
+            .first()
+        )
+        if latest is not None and latest.id != opp.id:
+            opp = latest
+    result = _opportunity_to_dict(opp)
+    result["trade"] = _trade_to_dict(trade) if trade else None
+    return result
+
+
 # ── Execute trade ─────────────────────────────────────────────────────────────
 
 @app.post("/trade/{opportunity_id}")
@@ -89,7 +112,11 @@ def execute_trade(opportunity_id: int, db: Session = Depends(get_db)):
     if opp.direction == "neutral":
         raise HTTPException(status_code=400, detail="Cannot trade neutral signal")
 
-    order = alpaca.submit_bracket_order(opp.ticker, opp.direction)
+    order = alpaca.submit_bracket_order(
+        opp.ticker,
+        opp.direction,
+        confidence=opp.fused_confidence or 0.0,
+    )
 
     try:
         trade = Trade(
@@ -166,6 +193,60 @@ def history(db: Session = Depends(get_db)):
     return [_trade_to_dict(t) for t in trades]
 
 
+# ── Portfolio snapshots ───────────────────────────────────────────────────────
+
+@app.get("/snapshots")
+def get_snapshots(db: Session = Depends(get_db)):
+    snaps = (
+        db.query(PortfolioSnapshot)
+        .order_by(PortfolioSnapshot.recorded_at)
+        .all()
+    )
+    return [
+        {
+            "recorded_at": s.recorded_at.isoformat(),
+            "equity": s.equity,
+            "cash": s.cash,
+        }
+        for s in snaps
+    ]
+
+
+# ── Watchlist ─────────────────────────────────────────────────────────────────
+
+@app.get("/watchlist")
+def get_watchlist():
+    data = json.loads(WATCHLIST_PATH.read_text())
+    return [{"ticker": k, "company": v} for k, v in data.items()]
+
+
+@app.post("/watchlist")
+def add_to_watchlist(body: dict):
+    ticker = body.get("ticker", "").upper().strip()
+    company = body.get("company", "").strip()
+    if not ticker or not company:
+        raise HTTPException(status_code=422, detail="ticker and company required")
+    with _watchlist_lock:
+        data = json.loads(WATCHLIST_PATH.read_text())
+        if ticker in data:
+            raise HTTPException(status_code=409, detail=f"{ticker} already in watchlist")
+        data[ticker] = company
+        WATCHLIST_PATH.write_text(json.dumps(data, indent=2))
+    return {"ticker": ticker, "company": company}
+
+
+@app.delete("/watchlist/{ticker}")
+def remove_from_watchlist(ticker: str):
+    ticker = ticker.upper()
+    with _watchlist_lock:
+        data = json.loads(WATCHLIST_PATH.read_text())
+        if ticker not in data:
+            raise HTTPException(status_code=404, detail=f"{ticker} not in watchlist")
+        del data[ticker]
+        WATCHLIST_PATH.write_text(json.dumps(data, indent=2))
+    return {"removed": ticker}
+
+
 # ── Scan status ───────────────────────────────────────────────────────────────
 
 @app.get("/scan/status")
@@ -173,13 +254,15 @@ def scan_status():
     return SCAN_STATUS
 
 
-# ── Manual scan trigger ───────────────────────────────────────────────────────
+# ── Health ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
     db.execute(text("SELECT 1"))
     return {"status": "ok"}
 
+
+# ── Manual scan trigger ───────────────────────────────────────────────────────
 
 @app.post("/scan")
 def trigger_scan(ticker: str = Query(default=None)):
@@ -210,6 +293,11 @@ def _opportunity_to_dict(o: Opportunity) -> dict:
         "llm_explanation": o.llm_explanation,
         "judge_verdict": o.judge_verdict,
         "judge_reason": o.judge_reason,
+        "entry_price": o.entry_price,
+        "outcome_price": o.outcome_price,
+        "outcome_pnl_pct": o.outcome_pnl_pct,
+        "outcome_status": o.outcome_status,
+        "outcome_recorded_at": o.outcome_recorded_at.isoformat() if o.outcome_recorded_at else None,
         "signal_detail": o.signal_detail,
         "traded": bool(o.traded),
     }
