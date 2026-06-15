@@ -31,5 +31,5 @@ jobs:
           OPENAI_API_KEY: test
           ALPACA_API_KEY: test
           ALPACA_SECRET_KEY: test
-          DATABASE_URL: sqlite:///:memory:
+          DATABASE_URL: "sqlite:///:memory:"
         run: pytest tests/ -v
