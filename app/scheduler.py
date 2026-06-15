@@ -14,9 +14,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from openai import OpenAI
 
-from app.signals import stocktwits, gdelt, technical, nn_signal
-from app.fusion import aggregator, synthesizer, judge
+from app.fusion import aggregator, judge, synthesizer
 from app.models import Opportunity, Trade, get_engine, get_session_factory
+from app.signals import gdelt, nn_signal, stocktwits, technical
 from app.trading import alpaca
 
 logger = logging.getLogger(__name__)

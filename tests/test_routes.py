@@ -1,11 +1,12 @@
 """FastAPI route tests using TestClient with in-memory SQLite and dependency overrides."""
 import os
-import pytest
 from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("OPENAI_API_KEY", "test")
@@ -13,8 +14,8 @@ os.environ.setdefault("ALPACA_API_KEY", "test")
 os.environ.setdefault("ALPACA_SECRET_KEY", "test")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
-from app.models import Base, Opportunity  # noqa: E402
 from app.main import app, get_db  # noqa: E402
+from app.models import Base, Opportunity  # noqa: E402
 
 # ── In-memory DB shared across all route tests ────────────────────────────────
 

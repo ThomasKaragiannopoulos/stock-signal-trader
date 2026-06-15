@@ -1,5 +1,18 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, Boolean, Index, ForeignKeyConstraint, create_engine, text
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    create_engine,
+    text,
+)
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 Base = declarative_base()

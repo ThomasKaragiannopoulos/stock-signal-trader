@@ -1,8 +1,9 @@
 """Unit tests for technical signal with mocked yfinance."""
-import pandas as pd
-import pytest
 from unittest.mock import patch
-from app.signals.technical import get_signal, _compute_rsi, _compute_macd_signal, _compute_ma_score
+
+import pandas as pd
+
+from app.signals.technical import _compute_ma_score, _compute_macd_signal, _compute_rsi, get_signal
 
 
 def _make_close(values: list[float]) -> pd.Series:

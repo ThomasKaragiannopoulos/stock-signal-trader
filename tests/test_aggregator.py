@@ -1,5 +1,4 @@
 """Unit tests for signal fusion aggregator."""
-import pytest
 from app.fusion.aggregator import fuse
 
 

@@ -1,9 +1,11 @@
 """Unit tests for GDELT signal with mocked HTTP + LLM."""
 import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from app.signals.gdelt import get_signal
+
 import app.signals.gdelt as gdelt_mod
+from app.signals.gdelt import get_signal
 
 
 def _mock_client(score: float, confidence: float, summary: str = "Test summary"):

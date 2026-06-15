@@ -2,6 +2,7 @@
 Alpaca paper trading: execute bracket orders, fetch positions, sync trade status.
 """
 import os
+
 import httpx
 
 ALPACA_BASE = "https://paper-api.alpaca.markets/v2"

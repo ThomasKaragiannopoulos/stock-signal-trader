@@ -1,8 +1,8 @@
 """
 Technical signal: yfinance OHLCV → RSI(14), MACD, 20/50 MA crossover → score in [-1, +1].
 """
-import yfinance as yf
 import pandas as pd
+import yfinance as yf
 
 
 def _compute_rsi(close: pd.Series, period: int = 14) -> float:
