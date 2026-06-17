@@ -11,6 +11,7 @@ MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))
 MAX_TOTAL_EXPOSURE_PCT = float(os.getenv("MAX_TOTAL_EXPOSURE_PCT", "0.20"))
 STOP_LOSS_PCT     = float(os.getenv("STOP_LOSS_PCT", "0.03"))
 TAKE_PROFIT_PCT   = float(os.getenv("TAKE_PROFIT_PCT", "0.05"))
+MIN_NOTIONAL      = float(os.getenv("MIN_NOTIONAL", "1000"))
 
 
 def _headers() -> dict:
@@ -64,7 +65,8 @@ def submit_bracket_order(ticker: str, direction: str, confidence: float = 1.0) -
     confidence = max(0.0, min(1.0, float(confidence or 0.0)))
     base_notional = equity * POSITION_SIZE_PCT
     remaining_exposure = max(0.0, equity * MAX_TOTAL_EXPOSURE_PCT - _current_exposure(positions))
-    notional = round(min(base_notional * confidence, remaining_exposure), 2)
+    raw_notional = base_notional * confidence
+    notional = round(min(max(raw_notional, MIN_NOTIONAL), remaining_exposure), 2)
     if notional <= 0:
         raise ValueError("Position size is zero after confidence scaling and exposure limits")
 
@@ -129,6 +131,18 @@ def _current_exposure(positions: list[dict]) -> float:
 def get_order(order_id: str, nested: bool = False) -> dict:
     params = {"nested": "true"} if nested else None
     resp = httpx.get(f"{ALPACA_BASE}/orders/{order_id}", headers=_headers(), params=params, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def cancel_order(order_id: str) -> None:
+    resp = httpx.delete(f"{ALPACA_BASE}/orders/{order_id}", headers=_headers(), timeout=10)
+    if resp.status_code not in (200, 204):
+        resp.raise_for_status()
+
+
+def close_position(ticker: str) -> dict:
+    resp = httpx.delete(f"{ALPACA_BASE}/positions/{ticker}", headers=_headers(), timeout=10)
     resp.raise_for_status()
     return resp.json()
 

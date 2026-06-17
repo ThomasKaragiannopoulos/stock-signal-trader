@@ -237,6 +237,8 @@ def run_scan(session_factory=None, tickers: list[str] | None = None):
         session.close()
         logger.info("Scan complete: %d opportunities saved", len(opportunities))
 
+        take_portfolio_snapshot(session_factory)
+
     finally:
         SCAN_STATUS.update({"running": False, "phase": 0, "phase_label": "idle"})
         _scan_lock.release()

@@ -154,12 +154,15 @@ def execute_trade(opportunity_id: int, db: Session = Depends(get_db)):
 # ── Portfolio ─────────────────────────────────────────────────────────────────
 
 @app.get("/portfolio")
-def portfolio():
+def portfolio(db: Session = Depends(get_db)):
     try:
         positions = alpaca.get_positions()
         account = alpaca.get_account()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Alpaca error: {e}")
+
+    open_trades = db.query(Trade).filter_by(status="open").all()
+    trade_id_by_ticker = {t.ticker: t.id for t in open_trades}
 
     return {
         "equity": float(account["equity"]),
@@ -174,10 +177,60 @@ def portfolio():
                 "unrealised_pnl": float(p["unrealized_pl"]),
                 "unrealised_pnl_pct": float(p["unrealized_plpc"]) * 100,
                 "market_value": float(p["market_value"]),
+                "trade_id": trade_id_by_ticker.get(p["symbol"]),
             }
             for p in positions
         ],
     }
+
+
+# ── Open trades (pending + filled) ───────────────────────────────────────────
+
+@app.get("/trades/open")
+def open_trades(db: Session = Depends(get_db)):
+    trades = db.query(Trade).filter_by(status="open").order_by(desc(Trade.executed_at)).all()
+    return [_trade_to_dict(t) for t in trades]
+
+
+# ── Cancel pending order ──────────────────────────────────────────────────────
+
+@app.delete("/trade/{trade_id}")
+def cancel_trade(trade_id: int, db: Session = Depends(get_db)):
+    trade = db.query(Trade).filter_by(id=trade_id).first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    if trade.status != "open":
+        raise HTTPException(status_code=400, detail=f"Trade is already {trade.status}")
+    try:
+        alpaca.cancel_order(trade.alpaca_order_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Alpaca cancel failed: {e}")
+    trade.status = "cancelled"
+    trade.closed_at = datetime.utcnow()
+    db.commit()
+    return _trade_to_dict(trade)
+
+
+# ── Manual close filled position ──────────────────────────────────────────────
+
+@app.post("/trade/{trade_id}/close")
+def manual_close(trade_id: int, db: Session = Depends(get_db)):
+    trade = db.query(Trade).filter_by(id=trade_id).first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    if trade.status != "open":
+        raise HTTPException(status_code=400, detail=f"Trade is already {trade.status}")
+    try:
+        result = alpaca.close_position(trade.ticker)
+        exit_price = float(result.get("filled_avg_price") or result.get("limit_price") or trade.entry_price)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Alpaca close failed: {e}")
+    trade.status = "closed"
+    trade.exit_price = exit_price
+    trade.realised_pnl = round((exit_price - trade.entry_price) * trade.qty, 2)
+    trade.closed_at = datetime.utcnow()
+    db.commit()
+    return _trade_to_dict(trade)
 
 
 # ── History ───────────────────────────────────────────────────────────────────

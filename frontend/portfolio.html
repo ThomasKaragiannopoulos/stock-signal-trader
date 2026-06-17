@@ -9,9 +9,11 @@
 <body>
   <nav>
     <a href="/" class="brand">Signal Trader</a>
-    <a href="/" data-page="opportunities">Opportunities</a>
+    <a href="/" data-page="overview">Overview</a>
+    <a href="/scan.html" data-page="scan">Scan</a>
     <a href="/portfolio.html" data-page="portfolio" class="active">Portfolio</a>
     <a href="/history.html" data-page="history">History</a>
+    <a href="/settings.html" data-page="settings">Settings</a>
   </nav>
 
   <main>
@@ -29,6 +31,7 @@
       </div>
     </div>
 
+    <h2>Open Positions</h2>
     <table>
       <thead>
         <tr>
@@ -39,9 +42,28 @@
           <th>Current</th>
           <th>P&amp;L</th>
           <th>P&amp;L %</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="positions-body">
+        <tr><td colspan="8" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+
+    <h2 style="margin-top:2rem">Pending Orders</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Direction</th>
+          <th>Qty</th>
+          <th>Entry</th>
+          <th>Notional</th>
+          <th>Submitted</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="pending-body">
         <tr><td colspan="7" class="empty">Loading…</td></tr>
       </tbody>
     </table>

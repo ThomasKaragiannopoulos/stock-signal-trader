@@ -183,6 +183,94 @@ async function loadOverview() {
   }
 }
 
+// ── Portfolio page ────────────────────────────────────────────────────────────
+
+async function loadPortfolio() {
+  setActive("portfolio");
+
+  const [portResult, openResult] = await Promise.allSettled([
+    api("/portfolio"),
+    api("/trades/open"),
+  ]);
+
+  const port  = portResult.status === "fulfilled" ? portResult.value : null;
+  const open  = openResult.status === "fulfilled" ? openResult.value : [];
+
+  if (port) {
+    document.getElementById("equity").textContent = fmtMoney(port.equity);
+    document.getElementById("cash").textContent   = fmtMoney(port.cash);
+  }
+
+  const filledTickers = new Set((port?.positions ?? []).map(p => p.ticker));
+
+  // Open positions (filled on Alpaca)
+  const posBody = document.getElementById("positions-body");
+  if (port && port.positions.length) {
+    posBody.innerHTML = port.positions.map(p => `
+      <tr>
+        <td><strong>${p.ticker}</strong></td>
+        <td>${p.side}</td>
+        <td>${p.qty}</td>
+        <td>${fmtMoney(p.entry_price)}</td>
+        <td>${fmtMoney(p.current_price)}</td>
+        <td class="${pnlClass(p.unrealised_pnl)}">${fmtMoney(p.unrealised_pnl)}</td>
+        <td class="${pnlClass(p.unrealised_pnl_pct)}">${fmt(p.unrealised_pnl_pct, 1)}%</td>
+        <td>${p.trade_id != null
+          ? `<button class="btn-action btn-close" onclick="closePosition(${p.trade_id}, '${p.ticker}', this)">Close</button>`
+          : "—"}</td>
+      </tr>`).join("");
+  } else {
+    posBody.innerHTML = `<tr><td colspan="8" class="empty">${port ? "No open positions." : "Could not load positions."}</td></tr>`;
+  }
+
+  // Pending orders (submitted but not yet filled)
+  const pending = open.filter(t => !filledTickers.has(t.ticker));
+  const pendBody = document.getElementById("pending-body");
+  if (pending.length) {
+    pendBody.innerHTML = pending.map(t => `
+      <tr>
+        <td><strong>${t.ticker}</strong></td>
+        <td>${directionSymbol(t.direction)}</td>
+        <td>${t.qty}</td>
+        <td>${fmtMoney(t.entry_price)}</td>
+        <td>${fmtMoney(t.notional)}</td>
+        <td>${fmtDateTime(t.executed_at)}</td>
+        <td><button class="btn-action btn-cancel" onclick="cancelTrade(${t.id}, this)">Cancel</button></td>
+      </tr>`).join("");
+  } else {
+    pendBody.innerHTML = `<tr><td colspan="7" class="empty">No pending orders.</td></tr>`;
+  }
+}
+
+async function closePosition(tradeId, ticker, btn) {
+  if (!confirm(`Close position in ${ticker}? This will market-sell immediately.`)) return;
+  btn.disabled = true;
+  btn.textContent = "Closing…";
+  try {
+    await api(`/trade/${tradeId}/close`, { method: "POST" });
+    toast(`${ticker} position closed`, "success");
+    loadPortfolio();
+  } catch (e) {
+    toast(`Close failed: ${e.message}`, "error");
+    btn.disabled = false;
+    btn.textContent = "Close";
+  }
+}
+
+async function cancelTrade(tradeId, btn) {
+  btn.disabled = true;
+  btn.textContent = "Cancelling…";
+  try {
+    const t = await api(`/trade/${tradeId}`, { method: "DELETE" });
+    toast(`Order cancelled: ${t.ticker}`, "success");
+    loadPortfolio();
+  } catch (e) {
+    toast(`Cancel failed: ${e.message}`, "error");
+    btn.disabled = false;
+    btn.textContent = "Cancel";
+  }
+}
+
 // ── Scan page ─────────────────────────────────────────────────────────────────
 
 let _allScanCards = [];
